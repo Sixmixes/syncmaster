@@ -22,6 +22,7 @@ export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack })
   const [isForgingSocial, setIsForgingSocial] = useState(false);
   const [socialSuite, setSocialSuite] = useState<any>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [savedAssetPackPath, setSavedAssetPackPath] = useState<string | null>(null);
   
   // High-fidelity Visualizer custom modes (Avee Player Inspired)
   const [useParticles, setUseParticles] = useState(true);
@@ -733,6 +734,71 @@ export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack })
 
       setSocialSuite(suite);
       setIsForgingSocial(false);
+
+      // ==================== AUTOMATIC FILE ARCHIVAL PASS ====================
+      // Automatically compile assets into a beautiful local Markdown pack alongside the track
+      const docContent = `
+# 🚀 SPACEJAMZ CONTENT FORGE MARKETING PACK 🚀
+## 🎵 Master Track: ${title}
+Generated on: ${new Date().toLocaleDateString()}
+
+---
+📅 **Recommended Posting Time:** ${suite.bestTime}
+🔥 **Algorithmic Virality Benchmark:** ${suite.engagement}/100
+
+=========================================
+1️⃣ TIKTOK / REELS / SHORTS HOOK CONCEPTS
+=========================================
+${suite.tiktokHooks.map((hook, idx) => `Hook ${idx + 1}: "${hook}"`).join('\n\n')}
+
+=========================================
+2️⃣ INSTAGRAM CAROUSEL CAPTIONS
+=========================================
+${suite.instagramCaptions.map((cap, idx) => `[Variation ${idx + 1}]\n${cap}`).join('\n\n')}
+
+🏷️ TARGETED HASHTAG STACK:
+${suite.hashtags}
+
+=========================================
+3️⃣ YOUTUBE VIDEO SEO SUITE
+=========================================
+📌 TITLE TEMPLATE:
+${suite.youtubeTitle}
+
+📝 OPTIMIZED DESCRIPTION:
+${suite.youtubeDesc}
+
+=========================================
+4️⃣ X (TWITTER) ENGAGEMENT THREAD
+=========================================
+${suite.tweetThread.map((tweet, idx) => `[Tweet ${idx + 1}/3]\n${tweet}`).join('\n\n')}
+
+=========================================
+5️⃣ LINKEDIN SYNC B2B UPDATE
+=========================================
+${suite.linkedinPost}
+
+=========================================
+6️⃣ DIRECT-TO-FAN EMAIL NEWSLETTER
+=========================================
+${suite.emailNewsletter}
+
+---
+✨ SpaceJamz Growth Operating System - Scaling Producer Careers.
+      `.trim();
+
+      const targetPath = track.filepath || audioFile;
+      if (targetPath && (window as any).api?.saveMarketingPack) {
+        (window as any).api.saveMarketingPack(targetPath, docContent)
+          .then((result: any) => {
+            if (result.success) {
+              setSavedAssetPackPath(result.path);
+              // Auto-dismiss success toast after 5 seconds
+              setTimeout(() => setSavedAssetPackPath(null), 5000);
+            }
+          })
+          .catch((err: any) => console.error("[Content Forge] Native auto-save failed:", err));
+      }
     }, 1200);
   };
 
@@ -1573,6 +1639,34 @@ export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack })
 
         {activeTab === 'social' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            
+            <AnimatePresence>
+              {savedAssetPackPath && (
+                <motion.div
+                  initial={{ opacity: 0, y: -15, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  style={{
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    color: '#34d399',
+                    boxShadow: '0 4px 20px rgba(16, 185, 129, 0.1)'
+                  }}
+                >
+                  <CheckCircle size={20} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 800 }}>Offline Marketing Pack Saved!</div>
+                    <div style={{ fontSize: '11px', opacity: 0.8, fontFamily: 'monospace', wordBreak: 'break-all', marginTop: '2px' }}>Saved to: {savedAssetPackPath}</div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Track Selection Area */}
             <div style={{ 
               background: 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%)', 

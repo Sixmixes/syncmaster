@@ -680,6 +680,24 @@ ipcMain.handle('analyze-vault-file', async (event, fileId: number, filePath: str
     return { success: false, error: err.message };
   }
 });
+ipcMain.handle('save-marketing-pack', async (event, filePath: string, content: string) => {
+  try {
+    const resolved = resolveActualPath(decodeURIComponent(filePath.replace('media://', '')));
+    const dir = path.dirname(resolved);
+    const base = path.basename(resolved, path.extname(resolved));
+    
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    const outPath = path.join(dir, `${base}_SocialAssets.md`);
+    fs.writeFileSync(outPath, content, 'utf8');
+    return { success: true, path: outPath };
+  } catch (err: any) {
+    writeToLog(`save-marketing-pack failed: ${err.message}`);
+    return { success: false, error: err.message };
+  }
+});
 
 function getAudioMetadata(filePath: string): Promise<any> {
   return new Promise((resolve, reject) => {

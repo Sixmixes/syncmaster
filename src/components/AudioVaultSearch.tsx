@@ -72,9 +72,13 @@ export const AudioVaultSearch: React.FC<{
         return () => clearTimeout(debounce);
     }, [query, performSearch]);
 
-    // When scan completes in background, instantly populate new entries
+    // Reactively respond to active scan state transitions
     useEffect(() => {
-        if (!isScanning) {
+        if (isScanning) {
+            // Instantly clear cached file arrays to display active indexing telemetry clearly
+            setResults([]);
+            setTotalMatches(0);
+        } else {
             performSearch(query);
         }
     }, [isScanning, performSearch, query]);

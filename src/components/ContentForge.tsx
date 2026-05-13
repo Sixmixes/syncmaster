@@ -287,6 +287,7 @@ export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack })
         }, 1000);
       } else {
         setGenerationProgress(Math.min(98, Math.floor(progress)));
+      }
     }, 250);
   };
 

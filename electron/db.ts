@@ -1,5 +1,6 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
+import fs from 'fs';
 import { app } from 'electron';
 
 let db: sqlite3.Database | null = null;
@@ -9,89 +10,136 @@ export function getDbPath(): string {
     return path.join(userDataPath, 'syncmaster_v2.db');
 }
 
-export function initDatabase(): Promise<void> {
+export function initDatabase(isRetrying = false): Promise<void> {
     return new Promise((resolve, reject) => {
         const dbPath = getDbPath();
+        
+        const handleCorruption = async (corruptErr: any) => {
+            if (isRetrying) {
+                console.error('[DB] Recursive corruption limit hit. Refusing to retry again.');
+                return reject(new Error(`Critical DB Rot: ${corruptErr?.message || 'Failed to heal'}`));
+            }
+            console.warn('[DB EMERGENCY] Disk corruption detected! Initiating physical system wipe and self-healing cycle...');
+            try {
+                if (db) {
+                    await new Promise<void>((res) => { db?.close(() => res()); });
+                    db = null;
+                }
+                
+                // Physical disk extraction of corrupted data caches
+                const diskFiles = [dbPath, `${dbPath}-wal`, `${dbPath}-shm`];
+                for (const diskFile of diskFiles) {
+                    if (fs.existsSync(diskFile)) {
+                        try {
+                            fs.unlinkSync(diskFile);
+                            console.log(`[DB HEALER] Unlinked corrupted file: ${diskFile}`);
+                        } catch (e) {
+                            // Renaming handles locked cases until system reboots
+                            fs.renameSync(diskFile, `${diskFile}.corrupt-${Date.now()}`);
+                            console.log(`[DB HEALER] Locked file safely quarantined: ${diskFile}`);
+                        }
+                    }
+                }
+                
+                // Recurse and rebuild
+                initDatabase(true).then(resolve).catch(reject);
+            } catch (healErr: any) {
+                console.error('[DB HEALER] Critical recovery pipeline failure:', healErr);
+                reject(healErr);
+            }
+        };
+
         db = new sqlite3.Database(dbPath, (err) => {
             if (err) {
+                if (err.message.includes('malformed') || err.message.includes('corrupt') || err.message.includes('disk')) {
+                    return handleCorruption(err);
+                }
                 console.error('Could not connect to database', err);
                 return reject(err);
             }
             console.log('Connected to SQLite database at:', dbPath);
             
-            db?.serialize(() => {
-                // Enable concurrency handling for python bridge
-                db?.run('PRAGMA journal_mode = WAL');
-                db?.run('PRAGMA busy_timeout = 30000');
+            // Proactive, non-blocking integrity check on startup
+            db.get('PRAGMA integrity_check', (chkErr, integrityRow: any) => {
+                if (chkErr || (integrityRow && integrityRow.integrity_check !== 'ok')) {
+                    console.error('[DB] Integrity check failed on launch! Row:', integrityRow, chkErr);
+                    return handleCorruption(chkErr || new Error('Integrity check failed'));
+                }
 
-                db?.run(`
-                    CREATE TABLE IF NOT EXISTS audio_files (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        filepath TEXT UNIQUE,
-                        filename TEXT,
-                        extension TEXT,
-                        filesize INTEGER,
-                        last_modified REAL,
-                        scanned_at REAL,
-                        bpm REAL,
-                        key TEXT,
-                        genre TEXT,
-                        has_vocals INTEGER,
-                        mood TEXT,
-                        energy INTEGER,
-                        danceability INTEGER,
-                        viral_score INTEGER,
-                        type TEXT
-                    )
-                `);
+                db?.serialize(() => {
+                    // Enable concurrency handling for python bridge
+                    db?.run('PRAGMA journal_mode = WAL');
+                    db?.run('PRAGMA busy_timeout = 30000');
 
-                // Dynamic, self-healing migrations for schema upgrade v2.1
-                db?.run("ALTER TABLE audio_files ADD COLUMN mood TEXT", () => {});
-                db?.run("ALTER TABLE audio_files ADD COLUMN energy INTEGER", () => {});
-                db?.run("ALTER TABLE audio_files ADD COLUMN danceability INTEGER", () => {});
-                db?.run("ALTER TABLE audio_files ADD COLUMN viral_score INTEGER", () => {});
-                db?.run("ALTER TABLE audio_files ADD COLUMN type TEXT", () => {});
-                
-                db?.run(`CREATE INDEX IF NOT EXISTS idx_filename ON audio_files(filename)`);
-                db?.run(`CREATE INDEX IF NOT EXISTS idx_genre ON audio_files(genre)`);
+                    db?.run(`
+                        CREATE TABLE IF NOT EXISTS audio_files (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            filepath TEXT UNIQUE,
+                            filename TEXT,
+                            extension TEXT,
+                            filesize INTEGER,
+                            last_modified REAL,
+                            scanned_at REAL,
+                            bpm REAL,
+                            key TEXT,
+                            genre TEXT,
+                            has_vocals INTEGER,
+                            mood TEXT,
+                            energy INTEGER,
+                            danceability INTEGER,
+                            viral_score INTEGER,
+                            type TEXT
+                        )
+                    `);
 
-                // 1. Establish FTS5 Virtual Table for instant substring/word lookup
-                db?.run(`
-                    CREATE VIRTUAL TABLE IF NOT EXISTS audio_fts USING fts5(
-                        filename, 
-                        filepath, 
-                        content='audio_files', 
-                        content_rowid='id'
-                    )
-                `);
+                    // Dynamic, self-healing migrations for schema upgrade v2.1
+                    db?.run("ALTER TABLE audio_files ADD COLUMN mood TEXT", () => {});
+                    db?.run("ALTER TABLE audio_files ADD COLUMN energy INTEGER", () => {});
+                    db?.run("ALTER TABLE audio_files ADD COLUMN danceability INTEGER", () => {});
+                    db?.run("ALTER TABLE audio_files ADD COLUMN viral_score INTEGER", () => {});
+                    db?.run("ALTER TABLE audio_files ADD COLUMN type TEXT", () => {});
+                    
+                    db?.run(`CREATE INDEX IF NOT EXISTS idx_filename ON audio_files(filename)`);
+                    db?.run(`CREATE INDEX IF NOT EXISTS idx_genre ON audio_files(genre)`);
 
-                // 2. Establish synchronization triggers ensuring index parity with active modifications
-                db?.run(`
-                    CREATE TRIGGER IF NOT EXISTS audio_ai AFTER INSERT ON audio_files BEGIN
-                        INSERT INTO audio_fts(rowid, filename, filepath) VALUES (new.id, new.filename, new.filepath);
-                    END;
-                `);
+                    // 1. Establish FTS5 Virtual Table for instant substring/word lookup
+                    db?.run(`
+                        CREATE VIRTUAL TABLE IF NOT EXISTS audio_fts USING fts5(
+                            filename, 
+                            filepath, 
+                            content='audio_files', 
+                            content_rowid='id'
+                        )
+                    `);
 
-                db?.run(`
-                    CREATE TRIGGER IF NOT EXISTS audio_ad AFTER DELETE ON audio_files BEGIN
-                        INSERT INTO audio_fts(audio_fts, rowid, filename, filepath) VALUES('delete', old.id, old.filename, old.filepath);
-                    END;
-                `);
+                    // 2. Establish synchronization triggers ensuring index parity with active modifications
+                    db?.run(`
+                        CREATE TRIGGER IF NOT EXISTS audio_ai AFTER INSERT ON audio_files BEGIN
+                            INSERT INTO audio_fts(rowid, filename, filepath) VALUES (new.id, new.filename, new.filepath);
+                        END;
+                    `);
 
-                db?.run(`
-                    CREATE TRIGGER IF NOT EXISTS audio_au AFTER UPDATE ON audio_files BEGIN
-                        INSERT INTO audio_fts(audio_fts, rowid, filename, filepath) VALUES('delete', old.id, old.filename, old.filepath);
-                        INSERT INTO audio_fts(rowid, filename, filepath) VALUES (new.id, new.filename, new.filepath);
-                    END;
-                `);
+                    db?.run(`
+                        CREATE TRIGGER IF NOT EXISTS audio_ad AFTER DELETE ON audio_files BEGIN
+                            INSERT INTO audio_fts(audio_fts, rowid, filename, filepath) VALUES('delete', old.id, old.filename, old.filepath);
+                        END;
+                    `);
 
-                // 3. Safe, lazy-bootstrapping script to back-fill pre-existing catalog indexes
-                db?.run(`
-                    INSERT OR IGNORE INTO audio_fts(rowid, filename, filepath)
-                    SELECT id, filename, filepath FROM audio_files 
-                    WHERE id NOT IN (SELECT rowid FROM audio_fts)
-                `, () => {
-                    resolve();
+                    db?.run(`
+                        CREATE TRIGGER IF NOT EXISTS audio_au AFTER UPDATE ON audio_files BEGIN
+                            INSERT INTO audio_fts(audio_fts, rowid, filename, filepath) VALUES('delete', old.id, old.filename, old.filepath);
+                            INSERT INTO audio_fts(rowid, filename, filepath) VALUES (new.id, new.filename, new.filepath);
+                        END;
+                    `);
+
+                    // 3. Safe, lazy-bootstrapping script to back-fill pre-existing catalog indexes
+                    db?.run(`
+                        INSERT OR IGNORE INTO audio_fts(rowid, filename, filepath)
+                        SELECT id, filename, filepath FROM audio_files 
+                        WHERE id NOT IN (SELECT rowid FROM audio_fts)
+                    `, () => {
+                        resolve();
+                    });
                 });
             });
         });
@@ -187,11 +235,36 @@ export function findAcapellas(): Promise<any[]> {
 
 export function clearDatabase(): Promise<void> {
     return new Promise((resolve, reject) => {
-        if (!db) return reject('DB not initialized');
-        db.run('DELETE FROM audio_files', (err) => {
-            if (err) reject(err);
-            else resolve();
-        });
+        const dbPath = getDbPath();
+        console.log('[DB] Request received to physically wipe system data caches...');
+        
+        const wipePhysicalFiles = async () => {
+            try {
+                if (db) {
+                    await new Promise<void>((res) => { db?.close(() => res()); });
+                    db = null;
+                }
+                
+                const diskFiles = [dbPath, `${dbPath}-wal`, `${dbPath}-shm`];
+                for (const diskFile of diskFiles) {
+                    if (fs.existsSync(diskFile)) {
+                        try {
+                            fs.unlinkSync(diskFile);
+                        } catch (e) {
+                            fs.renameSync(diskFile, `${diskFile}.wiped-${Date.now()}`);
+                        }
+                    }
+                }
+                
+                // Re-initialize fresh database structure
+                await initDatabase();
+                resolve();
+            } catch (err) {
+                reject(err);
+            }
+        };
+        
+        wipePhysicalFiles();
     });
 }
 

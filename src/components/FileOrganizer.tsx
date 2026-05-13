@@ -134,44 +134,56 @@ export const FileOrganizer = ({
     localStorage.setItem('syncmaster_global_meta', JSON.stringify(globalMetadata));
   }, [globalMetadata]);
 
-  const handleImportPaths = useCallback(async (incomingPaths: string[]) => {
+  const handleImportPaths = useCallback((incomingPaths: string[]) => {
     if (!incomingPaths || incomingPaths.length === 0 || !window.api) return;
 
-    const newFiles: ProcessedFile[] = incomingPaths.map(path => {
-      const pathParts = path.split(/[\\\/]/);
-      const fileName = pathParts[pathParts.length - 1];
-      return {
-        id: Math.random().toString(36).substring(7),
-        originalPath: path,
-        originalName: fileName,
-        status: 'processing'
-      };
+    setFiles(prev => {
+      // 1. Establish a strict set of existing paths to completely block duplicates
+      const existingPaths = new Set(prev.map(f => f.originalPath));
+      const uniqueIncoming = incomingPaths.filter(p => !existingPaths.has(p));
+
+      if (uniqueIncoming.length === 0) {
+        return prev; // Total collision. Stop state transition instantly.
+      }
+
+      const newFiles: ProcessedFile[] = uniqueIncoming.map(path => {
+        const pathParts = path.split(/[\\\/]/);
+        const fileName = pathParts[pathParts.length - 1];
+        return {
+          id: Math.random().toString(36).substring(7),
+          originalPath: path,
+          originalName: fileName,
+          status: 'processing'
+        };
+      });
+
+      // 2. Launch async analysis sequence for newly queued unique items
+      setTimeout(async () => {
+        for (const entry of newFiles) {
+          try {
+            const results = await window.api.analyzeFiles([entry.originalPath], globalMetadata);
+            const result = results[0];
+            setFiles(current => current.map(curr => {
+              if (curr.id === entry.id) {
+                if (result && result.success) {
+                  return { ...curr, status: 'staged', metadata: result.metadata, newName: result.newName || curr.originalName };
+                } else {
+                  return { ...curr, status: 'error', error: result?.error || "Failed analysis" };
+                }
+              }
+              return curr;
+            }));
+          } catch (err: any) {
+            console.error("Bridge import analysis failure", entry.originalPath, err);
+            setFiles(current => current.map(curr => curr.id === entry.id ? { ...curr, status: 'error', error: err.message } : curr));
+          }
+        }
+      }, 0);
+
+      return [...newFiles, ...prev];
     });
 
-    // Add to stage immediately
-    setFiles(prev => [...newFiles, ...prev]);
     setActiveTab('all');
-
-    // Execute strictly sequential analysis waterfall
-    for (const entry of newFiles) {
-      try {
-        const results = await window.api.analyzeFiles([entry.originalPath], globalMetadata);
-        const result = results[0];
-        setFiles(prev => prev.map(curr => {
-          if (curr.id === entry.id) {
-            if (result && result.success) {
-              return { ...curr, status: 'staged', metadata: result.metadata, newName: result.newName || curr.originalName };
-            } else {
-              return { ...curr, status: 'error', error: result?.error || "Failed analysis" };
-            }
-          }
-          return curr;
-        }));
-      } catch (err: any) {
-        console.error("Bridge import analysis failure", entry.originalPath, err);
-        setFiles(prev => prev.map(curr => curr.id === entry.id ? { ...curr, status: 'error', error: err.message } : curr));
-      }
-    }
   }, [globalMetadata]);
 
   const togglePlay = useCallback((file: ProcessedFile) => {
@@ -366,71 +378,22 @@ export const FileOrganizer = ({
     // 2. Fallback to OS Native File system drops
     const filesList = e.nativeEvent.dataTransfer?.files || e.dataTransfer.files;
     const droppedFiles = Array.from(filesList)
-      .filter(f => f.name.endsWith('.mp3') || f.name.endsWith('.wav'));
+      .filter(f => {
+        const name = f.name.toLowerCase();
+        return name.endsWith('.mp3') || name.endsWith('.wav') || name.endsWith('.m4a');
+      });
       
     if (droppedFiles.length === 0) return;
 
-    // Filter duplicates against current state
-    const newFiles: ProcessedFile[] = droppedFiles.map(f => {
-      // Simulate duplicate check
-      const isDuplicate = files.some(existing => existing.originalName === f.name) || f.name.includes('(1)');
-      const realPath = window.api ? window.api.resolveFilePath(f) : '';
-      
-      return {
-        id: Math.random().toString(36).substring(7),
-        originalPath: realPath,
-        originalName: f.name,
-        status: isDuplicate ? 'review' : 'processing',
-      };
-    });
+    // Extract real paths and feed directly into centralized deduplicated pipeline
+    const nativePaths = droppedFiles
+      .map(f => window.api ? window.api.resolveFilePath(f) : '')
+      .filter(p => p !== '');
 
-    setFiles(prev => [...newFiles, ...prev]);
-
-    // Send processing files to Electron main process sequentially for true step-by-step UI loading
-    const toProcess = newFiles.filter(f => f.status === 'processing');
-    if (toProcess.length > 0 && window.api) {
-      // Fire an IIFE async wrapper to manage loop
-      (async () => {
-        for (const f of toProcess) {
-          try {
-            const results = await window.api.analyzeFiles([f.originalPath], globalMetadata);
-            const result = results[0];
-            
-            setFiles(prev => prev.map(curr => {
-              if (curr.id === f.id) {
-                if (result && result.success) {
-                  return { ...curr, status: 'staged', metadata: result.metadata, newName: result.newName || curr.originalName };
-                } else {
-                  return { ...curr, status: 'error', error: result?.error || "Failed analysis" };
-                }
-              }
-              return curr;
-            }));
-          } catch (err: any) {
-            console.error("Processing failed for file", f.originalPath, err);
-            setFiles(prev => prev.map(curr => curr.id === f.id ? { ...curr, status: 'error', error: err.message } : curr));
-          }
-        }
-      })();
-    } else if (toProcess.length > 0) {
-      // Mock processing if running in browser
-      setTimeout(() => {
-        setFiles(prev => prev.map(f => {
-          if (toProcess.some(p => p.id === f.id)) {
-            const mockMeta = { bpm: 120, key: 'Cm', genre: 'Hip Hop', filename: f.originalName };
-            const baseName = f.originalName.replace(/\.[^/.]+$/, "");
-            return { 
-              ...f, 
-              status: 'staged', 
-              metadata: mockMeta,
-              newName: `${baseName}_120_Cm_Hip Hop.mp3`
-            };
-          }
-          return f;
-        }));
-      }, 2000);
+    if (nativePaths.length > 0) {
+      handleImportPaths(nativePaths);
     }
-  }, [files, handleImportPaths]);
+  }, [handleImportPaths]);
 
   // Process incoming paths sent from the global App context injection
   useEffect(() => {

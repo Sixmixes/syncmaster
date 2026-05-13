@@ -474,6 +474,17 @@ export const AudioVaultSearch: React.FC<{
                                     <div 
                                         key={file.id} 
                                         onClick={(e) => handleRowClick(e, file, idx)}
+                                        draggable={true}
+                                        onDragStart={(e) => {
+                                            let dragPaths = [file.filepath];
+                                            if (selectedIds.has(file.id)) {
+                                                dragPaths = filteredResults
+                                                    .filter(f => selectedIds.has(f.id))
+                                                    .map(f => f.filepath);
+                                            }
+                                            e.dataTransfer.setData('application/x-syncmaster-tracks', JSON.stringify(dragPaths));
+                                            e.dataTransfer.effectAllowed = 'copy';
+                                        }}
                                         style={{ 
                                             padding: compact ? '8px 12px' : '12px 16px', 
                                             display: 'flex', 
@@ -483,7 +494,7 @@ export const AudioVaultSearch: React.FC<{
                                             border: `1px solid ${isSelected ? 'rgba(168, 85, 247, 0.4)' : 'rgba(255,255,255,0.04)'}`,
                                             borderRadius: '8px',
                                             transition: 'all 0.15s ease',
-                                            cursor: 'pointer'
+                                            cursor: 'grab'
                                         }}
                                         className="nav-hover"
                                     >

@@ -349,6 +349,21 @@ export const FileOrganizer = ({
     e.preventDefault();
     setIsDragging(false);
 
+    // 1. Intercept application-internal track drops from Split Vault
+    const internalData = e.dataTransfer.getData('application/x-syncmaster-tracks');
+    if (internalData) {
+      try {
+        const draggedPaths = JSON.parse(internalData) as string[];
+        if (draggedPaths && draggedPaths.length > 0) {
+          handleImportPaths(draggedPaths);
+          return;
+        }
+      } catch (err) {
+        console.error("Failed to deserialize dropped internal paths:", err);
+      }
+    }
+
+    // 2. Fallback to OS Native File system drops
     const filesList = e.nativeEvent.dataTransfer?.files || e.dataTransfer.files;
     const droppedFiles = Array.from(filesList)
       .filter(f => f.name.endsWith('.mp3') || f.name.endsWith('.wav'));
@@ -415,7 +430,7 @@ export const FileOrganizer = ({
         }));
       }, 2000);
     }
-  }, [files]);
+  }, [files, handleImportPaths]);
 
   // Process incoming paths sent from the global App context injection
   useEffect(() => {

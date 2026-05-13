@@ -29,6 +29,7 @@ function App() {
   });
   const [pendingLoadPaths, setPendingLoadPaths] = useState<string[] | null>(null);
   const [activeTrack, setActiveTrack] = useState<PlayableTrack | null>(null);
+  const [forgeTrack, setForgeTrack] = useState<any>(null);
 
   // Promoted Global Scanner State for Background Operation
   const [isScanning, setIsScanning] = useState(false);
@@ -79,6 +80,11 @@ function App() {
     setPendingLoadPaths(null);
   };
 
+  const handleSendToForge = (track: any) => {
+    setForgeTrack(track);
+    setActiveModule('forge');
+  };
+
   const navItems = [
     { id: 'dashboard', icon: LayoutGrid, label: 'Dashboard' },
     { id: 'organizer', icon: Music, label: 'Organize & Tag' },
@@ -105,6 +111,7 @@ function App() {
       case 'vault': return (
         <AudioVaultSearch 
           onSendToOrganizer={handleSendToOrganizer} 
+          onSendToForge={handleSendToForge}
           onPlayTrack={handlePlayTrack}
           activeTrackId={activeTrack?.id}
           isScanning={isScanning}
@@ -113,7 +120,7 @@ function App() {
           onStartScan={handleStartScan}
         />
       );
-      case 'forge': return <ContentForge />;
+      case 'forge': return <ContentForge initialTrack={forgeTrack} />;
       case 'nexus': return <NetworkNexus />;
       case 'radar': return <OpportunityRadar />;
       case 'dashboard': return <DashboardPanel onNavigate={setActiveModule} />;

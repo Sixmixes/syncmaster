@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Hammer, Film, Image as ImageIcon, Play, FileVideo, Type, Sparkles, Camera, Tv, Smartphone, Upload, Loader2 } from 'lucide-react';
+import { Hammer, Film, Image as ImageIcon, Play, FileVideo, Type, Sparkles, Camera, Tv, Smartphone, Upload, Loader2, Copy, Share2, TrendingUp, Clock, CheckCircle, Hash, MessageSquare, Mail, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export const ContentForge: React.FC = () => {
+export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack }) => {
+  const [activeTab, setActiveTab] = useState<'visual' | 'social'>('visual');
+  const [selectedTrack, setSelectedTrack] = useState<any>(initialTrack || null);
+  
   const [aspectRatio, setAspectRatio] = useState<'916' | '11' | '169'>('916');
   const [visStyle, setVisStyle] = useState<'bars' | 'wave' | 'orbit'>('bars');
   const [audioFile, setAudioFile] = useState<string | null>(null);
@@ -15,10 +18,23 @@ export const ContentForge: React.FC = () => {
   const [prompt, setPrompt] = useState('Cyberpunk city skyline at dusk, high contrast neon, oil painting style');
   const [isGeneratingArt, setIsGeneratingArt] = useState(false);
   
+  // Social Studio specific states
+  const [isForgingSocial, setIsForgingSocial] = useState(false);
+  const [socialSuite, setSocialSuite] = useState<any>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  
   // High-fidelity Visualizer custom modes (Avee Player Inspired)
   const [useParticles, setUseParticles] = useState(true);
   const [beatShake, setBeatShake] = useState(true);
   const [vignetteGlow, setVignetteGlow] = useState(true);
+
+  useEffect(() => {
+    if (initialTrack) {
+      setSelectedTrack(initialTrack);
+      setTrackTitle(initialTrack.filename?.replace(/\.[^/.]+$/, "") || 'HYPERSONIC BEAT');
+      setActiveTab('social');
+    }
+  }, [initialTrack]);
 
   // Simulated or real-time bar heights for visualizer preview
   const [barHeights, setBarHeights] = useState(Array.from({ length: 15 }, () => Math.random() * 100));
@@ -86,6 +102,57 @@ export const ContentForge: React.FC = () => {
     speed: Math.random() * 2 + 1,
   })));
 
+  const handleForgeSocial = () => {
+    if (!selectedTrack) return;
+    setIsForgingSocial(true);
+    setSocialSuite(null);
+    
+    setTimeout(() => {
+      const track = selectedTrack;
+      const genre = track.genre || 'Hip Hop';
+      const bpm = Math.round(track.bpm || 140);
+      const key = track.key || 'Am';
+      const mood = track.mood || 'Dark / Aggressive';
+      const type = track.type || 'Beat';
+      const title = track.filename ? track.filename.replace(/\.[^/.]+$/, "") : 'HYPERSONIC BEAT';
+
+      const suite = {
+        tiktokHooks: [
+          `POV: You finally found the perfect ${mood.toLowerCase()} ${genre} vibe for your next project 🎧💎`,
+          `Drop everything and listen to this ${bpm} BPM bounce 🔥🔊`,
+          `Wait for the transients to hit... 💀🥁`,
+          `If you need a ${genre} record in ${key}, I just engineered the ultimate heater for you 🌊🎸`,
+          `This is your sign to write your next breakout single to this right now 👇🎯`
+        ],
+        instagramCaptions: [
+          `Slide 1: Synthesizing sonic energy...\nSlide 2: Starting with chords in ${key}...\nSlide 3: Heavy drum syncopation at ${bpm} BPM...\nSlide 4: Ready for your tracking! 🎚️`,
+          `The tonal dynamic on this new ${genre} record is insane (${mood} vibe). Instant licensing available now — DM me for contracts! 💎🎹`
+        ],
+        hashtags: `#${genre.replace(/[^a-zA-Z0-9]/g, '')} #${genre.replace(/[^a-zA-Z0-9]/g, '')}Producer #BeatStore #${bpm}BPM #${key} #IndependentArtist #ViralBeats #MusicProducerLife`,
+        youtubeTitle: `${mood} ${genre} Type ${type} - "${title}" (${bpm} BPM / ${key})`,
+        youtubeDesc: `💎 Secure Instant License | Free Stem Downloads: [LINK HERE]\n🔥 Title: "${title}"\n🎹 Core Key: ${key}\n🥁 Tempo: ${bpm} BPM\n🧬 Energy Matrix: ${mood}\n\nThis ${mood} ${genre} production was mathematically engineered for high impact. Drop a comment below if you like this drop!`,
+        tweetThread: [
+          `1/ Just completed this ${genre} production at ${bpm} BPM. Let's analyze the engineering process... 👇`,
+          `2/ Engineered the root chord sequence in ${key} to drive a ${mood.toLowerCase()} emotional profile.`,
+          `3/ Frequency alignment optimized for direct vocal tracking. Full audio inside!`
+        ],
+        linkedinPost: `Delighted to release my newest ${genre} project, "${title}". Maintaining frequency clarity at ${bpm} BPM required rigorous tonal balancing in the key of ${key}. Leveraging smart metadata tags is revolutionizing creative scaling workflows. How are algorithmic distribution models shifting your studio operations?`,
+        emailNewsletter: `New Track Launch: "${title}" (${genre})\n\nHey fam,\n\nI just finalized an incredible ${mood.toLowerCase()} masterpiece. Locked in at ${bpm} BPM, this track features a heavy rhythmic pocket optimized for artists who need dynamic range.\n\n👉 Listen and secure usage rights here: [LINK]`,
+        bestTime: track.danceability > 75 ? 'Friday 6:00 PM' : 'Wednesday 1:00 PM',
+        engagement: track.viral_score || 85
+      };
+
+      setSocialSuite(suite);
+      setIsForgingSocial(false);
+    }, 1200);
+  };
+
+  const handleCopyText = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
   const handleForge = () => {
     setIsGenerating(true);
     setGenerationProgress(0);
@@ -139,30 +206,76 @@ export const ContentForge: React.FC = () => {
             </p>
           </div>
           
-          <button 
-            className="btn" 
-            disabled={isGenerating}
-            onClick={handleForge}
-            style={{ 
-              background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', 
-              border: 'none', 
-              padding: '14px 28px', 
-              borderRadius: '12px', 
-              color: '#fff', 
-              fontWeight: 700, 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '10px', 
+          {activeTab === 'visual' && (
+            <button 
+              className="btn" 
+              disabled={isGenerating}
+              onClick={handleForge}
+              style={{ 
+                background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', 
+                border: 'none', 
+                padding: '14px 28px', 
+                borderRadius: '12px', 
+                color: '#fff', 
+                fontWeight: 700, 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '10px', 
+                cursor: 'pointer',
+                boxShadow: '0 0 30px rgba(244, 63, 94, 0.3)'
+              }}
+            >
+              {isGenerating ? <Loader2 className="animate-spin" size={18} /> : <Hammer size={18} />}
+              {isGenerating ? `Forging Video ${generationProgress}%` : 'Forge Social Visualizer'}
+            </button>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '32px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '16px' }}>
+          <button
+            onClick={() => setActiveTab('visual')}
+            style={{
+              background: activeTab === 'visual' ? 'rgba(255,255,255,0.06)' : 'transparent',
+              border: 'none',
+              color: activeTab === 'visual' ? '#fff' : 'var(--text-secondary)',
+              fontSize: '14px',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
               cursor: 'pointer',
-              boxShadow: '0 0 30px rgba(244, 63, 94, 0.3)'
+              padding: '10px 20px',
+              borderRadius: '10px',
+              transition: 'all 0.2s'
             }}
+            className="nav-hover"
           >
-            {isGenerating ? <Loader2 className="animate-spin" size={18} /> : <Hammer size={18} />}
-            {isGenerating ? `Forging Video ${generationProgress}%` : 'Forge Social Visualizer'}
+            <Film size={16} /> Visualizer Studio
+          </button>
+          <button
+            onClick={() => setActiveTab('social')}
+            style={{
+              background: activeTab === 'social' ? 'rgba(255,255,255,0.06)' : 'transparent',
+              border: 'none',
+              color: activeTab === 'social' ? '#fff' : 'var(--text-secondary)',
+              fontSize: '14px',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: 'pointer',
+              padding: '10px 20px',
+              borderRadius: '10px',
+              transition: 'all 0.2s'
+            }}
+            className="nav-hover"
+          >
+            <TrendingUp size={16} /> Social Automation Forge
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '32px' }}>
+        {activeTab === 'visual' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '32px' }}>
           
           {/* LEFT COLUMN: PREVIEW PANEL */}
           <div style={{ 
@@ -587,6 +700,232 @@ export const ContentForge: React.FC = () => {
           </div>
 
         </div>
+        )}
+
+        {activeTab === 'social' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Track Selection Area */}
+            <div style={{ 
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%)', 
+              border: '1px solid rgba(255,255,255,0.06)', 
+              borderRadius: '16px', 
+              padding: '24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                {selectedTrack ? (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                      <div style={{ background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', color: '#fff', fontSize: '10px', fontWeight: 800, padding: '3px 8px', borderRadius: '6px' }}>{selectedTrack.type?.toUpperCase() || 'TRACK'} LOADED</div>
+                      <span style={{ fontSize: '18px', fontWeight: 800 }}>{selectedTrack.filename || 'Selected File'}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                      <span>🥁 {Math.round(selectedTrack.bpm || 0)} BPM</span>
+                      <span>🎹 {selectedTrack.key || 'N/A'}</span>
+                      <span>🔥 {selectedTrack.mood || 'Unclassified'}</span>
+                      <span>💎 {selectedTrack.genre || 'Standard'}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <h3 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '4px', color: '#fff' }}>No Track Loaded</h3>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Navigate to the Audio Vault, select an analyzed file, and click "Forge Social Content".</p>
+                  </div>
+                )}
+              </div>
+
+              {selectedTrack && (
+                <button
+                  onClick={handleForgeSocial}
+                  disabled={isForgingSocial}
+                  style={{
+                    background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '12px 24px',
+                    color: '#fff',
+                    fontWeight: 800,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 15px rgba(244, 63, 94, 0.3)',
+                    transition: 'all 0.2s'
+                  }}
+                  className="btn"
+                >
+                  {isForgingSocial ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
+                  {isForgingSocial ? 'Synthesizing Suite...' : 'Forge 20 Marketing Assets'}
+                </button>
+              )}
+            </div>
+
+            {/* Results Dashboard */}
+            {socialSuite && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '24px' }}
+              >
+                {/* Social Cards Grid */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  
+                  {/* YouTube Toolkit Card */}
+                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px' }}>
+                    <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 700, color: '#fff', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
+                      <Film size={16} color="#ef4444" /> YouTube Automation Package
+                    </h4>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <label style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Optimized Video Title</label>
+                          <button onClick={() => handleCopyText(socialSuite.youtubeTitle, 'yt-title')} style={{ background: 'transparent', border: 'none', color: '#f43f5e', fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {copiedKey === 'yt-title' ? <CheckCircle size={12} color="#10b981" /> : <Copy size={12} />} {copiedKey === 'yt-title' ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '12px', fontSize: '13px', fontWeight: 600, color: '#fff' }}>
+                          {socialSuite.youtubeTitle}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <label style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Conversion-Focused Description Template</label>
+                          <button onClick={() => handleCopyText(socialSuite.youtubeDesc, 'yt-desc')} style={{ background: 'transparent', border: 'none', color: '#f43f5e', fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {copiedKey === 'yt-desc' ? <CheckCircle size={12} color="#10b981" /> : <Copy size={12} />} {copiedKey === 'yt-desc' ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        <pre style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '12px', fontSize: '12px', color: 'rgba(255,255,255,0.8)', whiteSpace: 'pre-wrap', fontFamily: 'monospace', margin: 0, lineHeight: 1.6 }}>
+                          {socialSuite.youtubeDesc}
+                        </pre>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Short-Form Hooks Card */}
+                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px' }}>
+                    <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 700, color: '#fff', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
+                      <Smartphone size={16} color="#a855f7" /> TikTok / IG Reels Hooks (5 Options)
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {socialSuite.tiktokHooks.map((hook: string, idx: number) => (
+                        <div key={idx} style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '8px', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s' }} className="nav-hover">
+                          <span style={{ fontSize: '13px', color: '#fff', fontWeight: 500 }}>"{hook}"</span>
+                          <button onClick={() => handleCopyText(hook, `hook-${idx}`)} style={{ background: 'transparent', border: 'none', color: copiedKey === `hook-${idx}` ? '#10b981' : 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: '4px' }}>
+                            {copiedKey === `hook-${idx}` ? <CheckCircle size={14} /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Social Platform Threads & Feeds */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    {/* Twitter Thread */}
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px' }}>
+                      <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 700, color: '#fff', marginBottom: '16px' }}>
+                        <MessageSquare size={14} color="#38bdf8" /> X (Twitter) Optimization
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {socialSuite.tweetThread.map((tweet: string, idx: number) => (
+                          <div key={idx} style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '8px', padding: '12px', position: 'relative' }}>
+                            <p style={{ margin: 0, fontSize: '12px', color: 'rgba(255,255,255,0.85)', paddingRight: '24px', lineHeight: 1.5 }}>{tweet}</p>
+                            <button onClick={() => handleCopyText(tweet, `tweet-${idx}`)} style={{ position: 'absolute', top: '10px', right: '10px', background: 'transparent', border: 'none', color: copiedKey === `tweet-${idx}` ? '#10b981' : 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>
+                              {copiedKey === `tweet-${idx}` ? <CheckCircle size={12} /> : <Copy size={12} />}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* LinkedIn Post */}
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 700, color: '#fff' }}>
+                          <Share2 size={14} color="#0a66c2" /> LinkedIn Strategy
+                        </h4>
+                        <button onClick={() => handleCopyText(socialSuite.linkedinPost, 'li-post')} style={{ background: 'transparent', border: 'none', color: '#f43f5e', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>
+                          {copiedKey === 'li-post' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '8px', padding: '14px', fontSize: '12px', color: 'rgba(255,255,255,0.85)', margin: 0, lineHeight: 1.6 }}>
+                        {socialSuite.linkedinPost}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Email Newsletter */}
+                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 700, color: '#fff' }}>
+                        <Mail size={14} color="#eab308" /> Email Blast Copy
+                      </h4>
+                      <button onClick={() => handleCopyText(socialSuite.emailNewsletter, 'email')} style={{ background: 'transparent', border: 'none', color: '#f43f5e', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>
+                        {copiedKey === 'email' ? 'Copied!' : 'Copy Text'}
+                      </button>
+                    </div>
+                    <pre style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '8px', padding: '14px', fontSize: '12px', color: 'rgba(255,255,255,0.85)', margin: 0, fontFamily: 'monospace', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                      {socialSuite.emailNewsletter}
+                    </pre>
+                  </div>
+
+                </div>
+
+                {/* Predictive Sidebar */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  
+                  {/* Viral Score Target Card */}
+                  <div style={{ 
+                    background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)', 
+                    border: '1px solid rgba(244, 63, 94, 0.25)', 
+                    borderRadius: '16px', 
+                    padding: '28px 24px',
+                    textAlign: 'center',
+                    boxShadow: 'inset 0 0 20px rgba(244,63,94,0.05)'
+                  }}>
+                    <h5 style={{ fontSize: '11px', color: '#f43f5e', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: '12px' }}>Predictive Virality</h5>
+                    <div style={{ fontSize: '56px', fontWeight: 900, color: '#fff', display: 'flex', alignItems: 'baseline', justifyContent: 'center', letterSpacing: '-0.02em' }}>
+                      {socialSuite.engagement}
+                      <span style={{ fontSize: '24px', color: '#f43f5e', marginLeft: '2px' }}>%</span>
+                    </div>
+                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px', lineHeight: 1.5 }}>Probability scale calculated via percussive alignment and key mode dynamics.</p>
+                  </div>
+
+                  {/* Best Time Card */}
+                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px' }}>
+                    <h5 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '16px' }}>
+                      <Clock size={14} color="#f43f5e" /> Optimal Post Window
+                    </h5>
+                    <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '18px', textAlign: 'center', fontSize: '18px', fontWeight: 800, color: '#fff' }}>
+                      {socialSuite.bestTime}
+                    </div>
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', textAlign: 'center', marginTop: '12px', lineHeight: 1.5 }}>Matches peak algorithmic activity for your calculated danceability score.</p>
+                  </div>
+
+                  {/* Hashtags Generator */}
+                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h5 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: '#fff' }}>
+                        <Hash size={14} color="#f43f5e" /> Smart Hashtags
+                      </h5>
+                      <button onClick={() => handleCopyText(socialSuite.hashtags, 'tags')} style={{ background: 'transparent', border: 'none', color: '#f43f5e', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>
+                        {copiedKey === 'tags' ? 'Copied' : 'Copy All'}
+                      </button>
+                    </div>
+                    <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '14px', fontSize: '12px', color: 'rgba(255,255,255,0.6)', lineHeight: 1.8 }}>
+                      {socialSuite.hashtags}
+                    </div>
+                  </div>
+
+                </div>
+              </motion.div>
+            )}
+          </div>
+        )}
 
       </motion.div>
     </div>

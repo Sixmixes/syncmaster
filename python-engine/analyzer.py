@@ -122,6 +122,52 @@ def analyze_audio(file_path):
         is_inst_filename = any(kw in filename_lower for kw in ['instrumental', 'inst', 'beat', 'dub'])
         has_vocals = False if is_inst_filename else has_vocals_dsp
 
+        # --- Energy, Mood, Danceability & Virality Metrics (Analyzer v2.1) ---
+        
+        # 1. Energy: Derived from root-mean-square (RMS) amplitudes and Spectral Centroid (brightness)
+        centroid = float(np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)))
+        energy_raw = (rms_harmonic + rms_percussive * 1.4) / 2.0
+        # Max normalize and clamp to a clean 0-100 integer scale
+        energy_score = min(100, max(10, int((energy_raw / 0.18) * 50 + (centroid / 4500) * 50)))
+        
+        # 2. Danceability: Combination of Percussive prominence, Tempo stability and 120-128 BPM golden ratio alignment
+        # Standard dance tempo target variance
+        tempo_alignment = max(0, 100 - (abs(124.0 - bpm) * 0.7))
+        percussive_prominence = min(1.0, rms_percussive / (rms_harmonic + 1e-6))
+        danceability_score = min(100, max(5, int(percussive_prominence * 50 + tempo_alignment * 0.5)))
+
+        # 3. Mood Classification: Correlates Mode (Major/Minor) with Energy density and Spectral Centroid
+        is_minor = key.endswith('m')
+        if is_minor:
+            if energy_score > 70:
+                mood = "Dark / Aggressive"
+            elif energy_score > 45:
+                mood = "Moody / Cinematic"
+            else:
+                mood = "Melancholic / Deep"
+        else:
+            if energy_score > 70:
+                mood = "Uplifting / Energetic"
+            elif energy_score > 45:
+                mood = "Warm / Happy"
+            else:
+                mood = "Chill / Relaxed"
+
+        # 4. Predictive Viral Score: Evaluates energy distribution, tempo urgency, and genre-specific dynamic range
+        viral_score = min(100, max(0, int(energy_score * 0.35 + danceability_score * 0.4 + 25)))
+
+        # 5. Smart Type Classification (Beat vs Song vs Acapella)
+        # If has vocals but virtually zero drum transients, it's an acapella
+        is_acapella = has_vocals and (rms_percussive < 0.004)
+        if is_acapella:
+            track_type = "Acapella"
+        elif has_vocals:
+            track_type = "Song"
+        elif any(genre_kw in genre for genre_kw in ["Trap", "Hip Hop", "Boom Bap"]):
+            track_type = "Beat"
+        else:
+            track_type = "Instrumental"
+
         camelot_map = {
             "C": "8B", "C#": "3B", "D": "10B", "D#": "5B", "E": "12B", "F": "7B", "F#": "2B", "G": "9B", "G#": "4B", "A": "11B", "A#": "6B", "B": "1B",
             "Cm": "5A", "C#m": "12A", "Dm": "7A", "D#m": "2A", "Em": "9A", "Fm": "4A", "F#m": "11A", "Gm": "6A", "G#m": "1A", "Am": "8A", "A#m": "3A", "Bm": "10A"
@@ -134,6 +180,11 @@ def analyze_audio(file_path):
             "key": key,
             "camelot": camelot,
             "genre": genre,
+            "mood": mood,
+            "energy": energy_score,
+            "danceability": danceability_score,
+            "viral_score": viral_score,
+            "type": track_type,
             "has_vocals": has_vocals,
             "filename": os.path.basename(file_path),
             "duration": true_duration

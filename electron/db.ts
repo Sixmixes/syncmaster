@@ -36,9 +36,21 @@ export function initDatabase(): Promise<void> {
                         bpm REAL,
                         key TEXT,
                         genre TEXT,
-                        has_vocals INTEGER
+                        has_vocals INTEGER,
+                        mood TEXT,
+                        energy INTEGER,
+                        danceability INTEGER,
+                        viral_score INTEGER,
+                        type TEXT
                     )
                 `);
+
+                // Dynamic, self-healing migrations for schema upgrade v2.1
+                db?.run("ALTER TABLE audio_files ADD COLUMN mood TEXT", () => {});
+                db?.run("ALTER TABLE audio_files ADD COLUMN energy INTEGER", () => {});
+                db?.run("ALTER TABLE audio_files ADD COLUMN danceability INTEGER", () => {});
+                db?.run("ALTER TABLE audio_files ADD COLUMN viral_score INTEGER", () => {});
+                db?.run("ALTER TABLE audio_files ADD COLUMN type TEXT", () => {});
                 
                 db?.run(`CREATE INDEX IF NOT EXISTS idx_filename ON audio_files(filename)`);
                 db?.run(`CREATE INDEX IF NOT EXISTS idx_genre ON audio_files(genre)`);
@@ -135,11 +147,32 @@ export function clearDatabase(): Promise<void> {
     });
 }
 
-export function updateAudioMetadata(id: number, data: { bpm: number, key: string, genre: string, has_vocals: boolean }): Promise<void> {
+export function updateAudioMetadata(id: number, data: { 
+    bpm: number, 
+    key: string, 
+    genre: string, 
+    has_vocals: boolean, 
+    mood?: string, 
+    energy?: number, 
+    danceability?: number, 
+    viral_score?: number, 
+    type?: string 
+}): Promise<void> {
     return new Promise((resolve, reject) => {
         if (!db) return reject('DB not initialized');
-        const sql = `UPDATE audio_files SET bpm = ?, key = ?, genre = ?, has_vocals = ? WHERE id = ?`;
-        db.run(sql, [data.bpm, data.key, data.genre, data.has_vocals ? 1 : 0, id], (err) => {
+        const sql = `UPDATE audio_files SET bpm = ?, key = ?, genre = ?, has_vocals = ?, mood = ?, energy = ?, danceability = ?, viral_score = ?, type = ? WHERE id = ?`;
+        db.run(sql, [
+            data.bpm, 
+            data.key, 
+            data.genre, 
+            data.has_vocals ? 1 : 0, 
+            data.mood || null, 
+            data.energy || null, 
+            data.danceability || null, 
+            data.viral_score || null, 
+            data.type || null, 
+            id
+        ], (err) => {
             if (err) reject(err);
             else resolve();
         });

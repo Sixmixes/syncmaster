@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, Database, Disc, Play, Pause, Loader2, Zap, FolderOpen, FileSymlink, FolderSearch, CheckSquare, Square, Trash2, Mic, ShieldCheck, Sparkles, AlertTriangle, Folder, Check, ChevronRight, X } from 'lucide-react';
+import { Search, Database, Disc, Play, Pause, Loader2, Zap, FolderOpen, FileSymlink, FolderSearch, CheckSquare, Square, Trash2, Mic, ShieldCheck, Sparkles, AlertTriangle, Folder, Check, ChevronRight, X, Hammer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface AudioResult {
@@ -12,10 +12,16 @@ interface AudioResult {
     bpm?: number;
     key?: string;
     has_vocals?: number;
+    mood?: string;
+    energy?: number;
+    danceability?: number;
+    viral_score?: number;
+    type?: string;
 }
 
 export const AudioVaultSearch: React.FC<{ 
     onSendToOrganizer?: (filePaths: string[]) => void;
+    onSendToForge?: (track: any) => void;
     onPlayTrack?: (track: { filepath: string; filename: string; id: string | number }) => void;
     activeTrackId?: string | number;
     isScanning: boolean;
@@ -23,7 +29,7 @@ export const AudioVaultSearch: React.FC<{
     foundCount: number;
     onStartScan: () => void;
     compact?: boolean;
-}> = ({ onSendToOrganizer, onPlayTrack, activeTrackId, isScanning, scanStatus, foundCount, onStartScan, compact = false }) => {
+}> = ({ onSendToOrganizer, onSendToForge, onPlayTrack, activeTrackId, isScanning, scanStatus, foundCount, onStartScan, compact = false }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<AudioResult[]>([]);
     
@@ -833,12 +839,36 @@ export const AudioVaultSearch: React.FC<{
                                     {activeTrackId === selectedFile.id ? 'Audition Running...' : 'Audition Playback'}
                                 </button>
                                 <button 
-                                    onClick={() => onSendToOrganizer && onSendToOrganizer([selectedFile.filepath])}
-                                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
-                                    className="nav-hover"
-                                >
-                                    <FileSymlink size={14} /> Load into Organizer
-                                </button>
+                                     onClick={() => onSendToOrganizer && onSendToOrganizer([selectedFile.filepath])}
+                                     style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+                                     className="nav-hover"
+                                 >
+                                     <FileSymlink size={14} /> Load into Organizer
+                                 </button>
+                                 {onSendToForge && (
+                                    <button 
+                                        onClick={() => onSendToForge(selectedFile)}
+                                        style={{ 
+                                            width: '100%', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'center', 
+                                            gap: '8px', 
+                                            padding: '12px', 
+                                            background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', 
+                                            border: 'none', 
+                                            borderRadius: '10px', 
+                                            color: '#fff', 
+                                            fontSize: '13px', 
+                                            fontWeight: 700, 
+                                            cursor: 'pointer',
+                                            boxShadow: '0 4px 12px rgba(244, 63, 94, 0.25)'
+                                        }}
+                                        className="nav-hover"
+                                    >
+                                        <Hammer size={14} /> Forge Social Content
+                                    </button>
+                                 )}
                             </div>
                         </motion.div>
                     )}

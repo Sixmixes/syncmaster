@@ -613,7 +613,12 @@ ipcMain.handle('analyze-vault-file', async (event, fileId: number, filePath: str
       bpm: data.bpm,
       key: data.key,
       genre: data.genre,
-      has_vocals: data.has_vocals
+      has_vocals: data.has_vocals,
+      mood: data.mood,
+      energy: data.energy,
+      danceability: data.danceability,
+      viral_score: data.viral_score,
+      type: data.type
     });
     return { success: true, data };
   } catch (err: any) {

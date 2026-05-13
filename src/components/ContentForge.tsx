@@ -31,10 +31,150 @@ export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack })
   useEffect(() => {
     if (initialTrack) {
       setSelectedTrack(initialTrack);
+      setAudioFile(initialTrack.filepath);
       setTrackTitle(initialTrack.filename?.replace(/\.[^/.]+$/, "") || 'HYPERSONIC BEAT');
       setActiveTab('social');
     }
   }, [initialTrack]);
+
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  
+  // ==================== DYNAMIC SEQUENCER & TAP TEMPO STATE ====================
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [tapTriggers, setTapTriggers] = useState<{ id: number; time: number; type: 'flash' | 'glitch' | 'shake' | 'invert' }[]>([]);
+  const [selectedFXType, setSelectedFXType] = useState<'flash' | 'glitch' | 'shake' | 'invert'>('flash');
+  const [activeBeatPulse, setActiveBeatPulse] = useState(false);
+
+  const renderTimeRef = React.useRef(0);
+  const previewAudioRef = React.useRef<HTMLAudioElement | null>(null);
+  const totalDuration = 15; 
+
+  // Manage preview source destruction on view tear-down
+  useEffect(() => {
+    return () => {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  // Global playhead synchronization pipeline
+  useEffect(() => {
+    let rAF: number;
+    const updateTime = () => {
+      if (previewAudioRef.current && !previewAudioRef.current.paused) {
+        const t = previewAudioRef.current.currentTime;
+        renderTimeRef.current = t;
+        setCurrentTime(t);
+        if (t >= totalDuration) {
+          previewAudioRef.current.currentTime = 0;
+        }
+      }
+      rAF = requestAnimationFrame(updateTime);
+    };
+    rAF = requestAnimationFrame(updateTime);
+    return () => cancelAnimationFrame(rAF);
+  }, []);
+
+  const addFXTrigger = (time: number) => {
+    // Cap values at 15.00 seconds
+    const safeTime = Math.max(0, Math.min(totalDuration, time));
+    setTapTriggers(prev => [
+      ...prev,
+      { id: Date.now() + Math.random(), time: safeTime, type: selectedFXType }
+    ].sort((a,b) => a.time - b.time));
+    
+    setActiveBeatPulse(true);
+    setTimeout(() => setActiveBeatPulse(false), 80);
+  };
+
+  // Keypress proxy handler for DAW-like Spacebar trigger recording
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+        return;
+      }
+      if (e.code === 'Space' && isPlayingPreview) {
+        e.preventDefault();
+        const time = previewAudioRef.current?.currentTime || 0;
+        addFXTrigger(time);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPlayingPreview, selectedFXType]);
+
+  const togglePreviewPlay = () => {
+    if (!audioFile) {
+      alert("Please select and load an audio source first!");
+      return;
+    }
+
+    if (isPlayingPreview) {
+      previewAudioRef.current?.pause();
+      setIsPlayingPreview(false);
+    } else {
+      if (!previewAudioRef.current) {
+        const url = audioFile.startsWith('media://') ? audioFile : `media://${audioFile}`;
+        previewAudioRef.current = new Audio(url);
+        previewAudioRef.current.loop = true;
+      }
+      previewAudioRef.current.play();
+      setIsPlayingPreview(true);
+    }
+  };
+
+  const handleTapRecord = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!isPlayingPreview) return;
+    const time = previewAudioRef.current?.currentTime || 0;
+    addFXTrigger(time);
+  };
+
+  const handleTimelineScrub = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+    const newTime = percentage * totalDuration;
+    
+    renderTimeRef.current = newTime;
+    setCurrentTime(newTime);
+    if (previewAudioRef.current) {
+      previewAudioRef.current.currentTime = newTime;
+    }
+  };
+
+  const bpmVal = Math.round(selectedTrack?.bpm || 120);
+  const beatStep = 60 / bpmVal;
+  
+  const handleQuantize = () => {
+    setTapTriggers(prev => prev.map(t => {
+      const snapped = Math.round(t.time / beatStep) * beatStep;
+      return { ...t, time: Math.max(0, Math.min(totalDuration, snapped)) };
+    }));
+  };
+
+  // Calculate linear hash intervals for beat rulers
+  const beatTicks: number[] = [];
+  for (let i = 0; i * beatStep <= totalDuration; i++) {
+    beatTicks.push(i * beatStep);
+  }
+
+  const [bgImageObj, setBgImageObj] = useState<HTMLImageElement | null>(null);
+
+  // Pre-compile background asset bitmap buffer for native Canvas 2D Context operations
+  useEffect(() => {
+    if (bgImage) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = bgImage;
+      img.onload = () => setBgImageObj(img);
+    } else {
+      setBgImageObj(null);
+    }
+  }, [bgImage]);
 
   // Simulated or real-time bar heights for visualizer preview
   const [barHeights, setBarHeights] = useState(Array.from({ length: 15 }, () => Math.random() * 100));
@@ -94,13 +234,222 @@ export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack })
   const glowOpacity = vignetteGlow ? Math.min(0.6, bassEnergy / 140) : 0.2;
   const pulseScale = beatShake ? 1 + (bassEnergy / 700) : 1;
 
-  // Generate stable random particle offsets
-  const [particles] = useState(Array.from({ length: 16 }, () => ({
-    x: Math.random() * 100,
-    y: Math.random() * 100,
-    size: Math.random() * 4 + 2,
-    speed: Math.random() * 2 + 1,
-  })));
+  // Real-time High-Fidelity HTML5 Canvas Rendering Engine
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+
+    // Maintain continuous floating particle pool for natural dynamic kinetic flow
+    const canvasParticles = Array.from({ length: 40 }, () => ({
+      x: Math.random() * canvas.width,
+      y: canvas.height + Math.random() * 100,
+      size: Math.random() * 5 + 2,
+      speed: Math.random() * 3 + 1,
+      opacity: Math.random()
+    }));
+
+    const draw = () => {
+      const width = canvas.width;
+      const height = canvas.height;
+      
+      ctx.clearRect(0, 0, width, height);
+
+      // ================ LAYER 1: GLOBAL FX BOUNDING CONTEXT ================
+      ctx.save();
+      ctx.filter = 'none';
+
+      const cTime = renderTimeRef.current;
+      const fxWindow = 0.18; // Active decay width
+      const activeTrigger = tapTriggers.find(t => cTime >= t.time && cTime < t.time + fxWindow);
+      let linearDecay = 0;
+
+      if (activeTrigger) {
+        linearDecay = 1 - ((cTime - activeTrigger.time) / fxWindow);
+        if (activeTrigger.type === 'invert') {
+          ctx.filter = `invert(${linearDecay * 0.85}) hue-rotate(${linearDecay * 180}deg)`;
+        } else if (activeTrigger.type === 'glitch') {
+          const glitchAmt = 20 * linearDecay * (Math.random() - 0.5);
+          ctx.translate(glitchAmt, 0);
+        } else if (activeTrigger.type === 'shake') {
+          const heavyShake = 32 * linearDecay * (Math.random() - 0.5);
+          ctx.translate(heavyShake, heavyShake);
+        }
+      }
+
+      const currentBass = barHeights[0] || 30;
+      // Native Canvas Beat Shaker Offset
+      const shakeOffset = beatShake ? (currentBass / 25) * (Math.random() - 0.5) : 0;
+      
+      // ================ LAYER 2: ELEMENT TRANSFORM BOUNDING CONTEXT ================
+      ctx.save();
+      ctx.translate(shakeOffset, shakeOffset);
+
+      // A. Background Coverage
+      if (bgImageObj) {
+        const imgRatio = bgImageObj.width / bgImageObj.height;
+        const canvasRatio = width / height;
+        let drawWidth = width;
+        let drawHeight = height;
+        let offsetX = 0;
+        let offsetY = 0;
+        
+        if (imgRatio > canvasRatio) {
+          drawWidth = height * imgRatio;
+          offsetX = (width - drawWidth) / 2;
+        } else {
+          drawHeight = width / imgRatio;
+          offsetY = (height - drawHeight) / 2;
+        }
+        
+        ctx.globalAlpha = visStyle === 'orbit' ? 0.4 : 0.7;
+        ctx.drawImage(bgImageObj, offsetX, offsetY, drawWidth, drawHeight);
+        ctx.globalAlpha = 1.0;
+      } else {
+        // Fluid Cyberpunk radial mesh
+        const gradient = ctx.createRadialGradient(width/2, height/2, 10, width/2, height/2, width);
+        gradient.addColorStop(0, '#1e1b4b');
+        gradient.addColorStop(1, '#050505');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      // B. Beat-Synced Glow Overlay
+      if (vignetteGlow) {
+        const glowGrad = ctx.createRadialGradient(width/2, height/2, width * 0.3, width/2, height/2, width * 0.9);
+        glowGrad.addColorStop(0, 'transparent');
+        glowGrad.addColorStop(1, `rgba(244, 63, 94, ${Math.min(0.4, currentBass / 180)})`);
+        ctx.fillStyle = glowGrad;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      // C. Floating Avee Particles
+      if (useParticles) {
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#f43f5e';
+        
+        canvasParticles.forEach((p) => {
+          p.y -= p.speed * (1 + currentBass / 200);
+          if (p.y < -20) {
+            p.y = height + Math.random() * 50;
+            p.x = Math.random() * width;
+          }
+          
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * (1 + currentBass / 800), 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity * 0.8})`;
+          ctx.fill();
+        });
+        ctx.shadowBlur = 0; 
+      }
+
+      // D. Waveform Visualizer Engine
+      const visY = aspectRatio === '916' ? height * 0.75 : height * 0.8;
+      
+      if (visStyle === 'bars') {
+        const barCount = barHeights.length;
+        const totalPadding = 10 * (barCount - 1);
+        const barW = (width * 0.8 - totalPadding) / barCount;
+        const startX = (width - (barW * barCount + totalPadding)) / 2;
+        
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = 'rgba(244, 63, 94, 0.6)';
+        
+        barHeights.forEach((val, i) => {
+          const curH = (val / 100) * (height * 0.18);
+          const x = startX + i * (barW + 10);
+          
+          const grad = ctx.createLinearGradient(x, visY, x, visY - curH);
+          grad.addColorStop(0, '#f43f5e');
+          grad.addColorStop(1, '#ec4899');
+          ctx.fillStyle = grad;
+          
+          ctx.beginPath();
+          ctx.roundRect(x, visY - curH, barW, Math.max(10, curH), 6);
+          ctx.fill();
+        });
+        ctx.shadowBlur = 0;
+      } else if (visStyle === 'wave') {
+        ctx.beginPath();
+        ctx.moveTo(0, visY);
+        const step = width / barHeights.length;
+        ctx.lineWidth = 8;
+        ctx.strokeStyle = '#f43f5e';
+        ctx.shadowBlur = 25;
+        ctx.shadowColor = '#f43f5e';
+        
+        for(let i = 0; i < barHeights.length; i++) {
+          const x = i * step;
+          const val = (barHeights[i] || 0) / 100 * 120;
+          const y = visY + (i % 2 === 0 ? -val : val);
+          ctx.quadraticCurveTo(x, y, x + step, visY);
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      } else if (visStyle === 'orbit') {
+        const pulse = 1 + (currentBass / 1200);
+        const orbitRadius = (aspectRatio === '916' ? 180 : 140) * pulse;
+        
+        ctx.save();
+        ctx.translate(width/2, visY - 40);
+        
+        // Spinning vinyl rate
+        const angle = (Date.now() / 2500) % (Math.PI * 2);
+        ctx.rotate(angle);
+        
+        ctx.shadowBlur = 35;
+        ctx.shadowColor = '#f43f5e';
+        ctx.beginPath();
+        ctx.arc(0, 0, orbitRadius, 0, Math.PI*2);
+        ctx.lineWidth = 8;
+        ctx.strokeStyle = '#f43f5e';
+        ctx.stroke();
+        
+        ctx.clip();
+        if (bgImageObj) {
+          ctx.drawImage(bgImageObj, -orbitRadius, -orbitRadius, orbitRadius*2, orbitRadius*2);
+        } else {
+          ctx.fillStyle = '#1a1a1a';
+          ctx.fill();
+        }
+        ctx.restore();
+        ctx.shadowBlur = 0;
+      }
+
+      // E. High-Resolution Branding Typography
+      if (showBranding) {
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#000';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 44px system-ui, -apple-system, sans-serif';
+        ctx.fillText(trackTitle.toUpperCase(), width/2, height * 0.9);
+        
+        ctx.fillStyle = '#f43f5e';
+        ctx.font = 'bold 28px system-ui, -apple-system, sans-serif';
+        ctx.fillText(artistName.toUpperCase(), width/2, height * 0.94);
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.restore(); // Closes Layer 2 (Element Transforms)
+      ctx.restore(); // Closes Layer 1 (Global FX Bounding)
+
+      // ================ POST-PROCESS LAYER OVERLAYS ================
+      // Strobe flash drawn in absolute base coordinates so filter inversions don't colorize it!
+      if (activeTrigger && activeTrigger.type === 'flash') {
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.6 * linearDecay})`;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      animationFrameId = requestAnimationFrame(draw);
+    };
+
+    draw();
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [bgImageObj, barHeights, visStyle, useParticles, beatShake, vignetteGlow, showBranding, trackTitle, artistName, aspectRatio, tapTriggers]);
 
   const handleForgeSocial = () => {
     if (!selectedTrack) return;
@@ -153,31 +502,127 @@ export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack })
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const handleForge = () => {
+  const getCanvasDims = () => {
+    switch(aspectRatio) {
+      case '916': return { width: 720, height: 1280 };
+      case '11': return { width: 1080, height: 1080 };
+      case '169': return { width: 1280, height: 720 };
+    }
+  };
+
+  const handleForge = async () => {
+    if (!audioFile) {
+      alert("Please select a track to synthesize first!");
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
     setIsGenerating(true);
     setGenerationProgress(0);
-    const interval = setInterval(() => {
-      setGenerationProgress(p => {
-        if (p >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            setIsGenerating(false);
-            alert('🎬 Visualizer successfully generated and saved to output/renders folder!');
-          }, 800);
-          return 100;
+
+    try {
+      // 1. Capture real-time Canvas back-buffer context at standard 30 FPS
+      const stream = (canvas as any).captureStream(30);
+      const chunks: Blob[] = [];
+
+      // 2. Instantiate web-native MediaRecorder pipeline (VP9 high compression)
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
+      mediaRecorder.ondataavailable = (evt) => {
+        if (evt.data.size > 0) chunks.push(evt.data);
+      };
+
+      // 3. Spawn synchronized system audio tag
+      const audioUrl = audioFile.startsWith('media://') ? audioFile : `media://${audioFile}`;
+      const audioPlayer = new Audio(audioUrl);
+      
+      const recordDuration = 15; // Perfect 15 second short-form capture window
+      let ticks = 0;
+      const tickInterval = setInterval(() => {
+        ticks++;
+        const pct = Math.min(98, Math.round((ticks / recordDuration) * 100));
+        setGenerationProgress(pct);
+      }, 1000);
+
+      mediaRecorder.onstop = async () => {
+        clearInterval(tickInterval);
+        setGenerationProgress(99);
+
+        const finalBlob = new Blob(chunks, { type: 'video/webm' });
+        const arrayBuffer = await finalBlob.arrayBuffer();
+        const uint8 = new Uint8Array(arrayBuffer);
+        
+        // Sequentially build binary stream avoiding large chunk stack overflow
+        let binary = '';
+        const len = uint8.byteLength;
+        for (let i = 0; i < len; i += 2048) {
+            const end = Math.min(i + 2048, len);
+            binary += String.fromCharCode.apply(null, uint8.subarray(i, end) as any);
         }
-        return p + 2;
-      });
-    }, 100);
+        const base64Str = window.btoa(binary);
+
+        // Send downstream to custom native multi-processor backend (FFmpeg)
+        if (window.api && (window.api as any).muxVideoAudio) {
+          const result = await (window.api as any).muxVideoAudio({
+             videoBase64: base64Str,
+             audioPath: audioFile
+          });
+
+          setIsGenerating(false);
+          if (result && result.success) {
+            alert(`🔥 Social Visualizer Forge Complete!\nSaved directly to your standard system downloads folder:\n${result.outputPath}`);
+          } else {
+             alert(`Encoding Matrix Error: ${result?.error || "Unknown failure"}`);
+          }
+        } else {
+          setIsGenerating(false);
+          alert("Electron Desktop API not detected. Saved fallback WebM stream.");
+        }
+      };
+
+      let syncInterval: any = null;
+      mediaRecorder.onstart = () => {
+        syncInterval = setInterval(() => {
+          renderTimeRef.current = audioPlayer.currentTime;
+        }, 16);
+      };
+
+      audioPlayer.play();
+      mediaRecorder.start();
+
+      setTimeout(() => {
+        if (syncInterval) clearInterval(syncInterval);
+        mediaRecorder.stop();
+        audioPlayer.pause();
+        renderTimeRef.current = 0; // Reset clock
+      }, recordDuration * 1000);
+
+    } catch (err: any) {
+      setIsGenerating(false);
+      alert(`Encoding stream failed: ${err.message}`);
+    }
   };
 
   const handleGenerateArt = () => {
+    if (!prompt.trim()) return;
     setIsGeneratingArt(true);
-    setTimeout(() => {
+    
+    const cleanTokens = prompt.replace(/[^a-zA-Z0-9\s]/g, '').split(/\s+/).slice(0, 3).join(',');
+    const nonce = Math.floor(Math.random() * 10000);
+    const generatorUrl = `https://loremflickr.com/800/800/${encodeURIComponent(cleanTokens)}?lock=${nonce}`;
+    
+    const testImg = new Image();
+    testImg.crossOrigin = 'anonymous';
+    testImg.src = generatorUrl;
+    testImg.onload = () => {
+      setBgImage(generatorUrl);
       setIsGeneratingArt(false);
-      // Mock generating an art URI
-      setBgImage('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=800&auto=format&fit=crop');
-    }, 2500);
+    };
+    testImg.onerror = () => {
+      setIsGeneratingArt(false);
+      alert("Canvas artwork fetching timeout. Please refine keywords.");
+    };
   };
 
   const getAspectStyles = () => {
@@ -275,6 +720,7 @@ export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack })
         </div>
 
         {activeTab === 'visual' && (
+          <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '32px' }}>
           
           {/* LEFT COLUMN: PREVIEW PANEL */}
@@ -305,11 +751,9 @@ export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack })
               <Sparkles size={14} color="#f43f5e" /> Live Render Simulator
             </div>
 
-            {/* Phone/Video Container */}
+            {/* High-Resolution Active Canvas Back-Buffer Container */}
             <motion.div
               layout
-              animate={{ scale: shakeScale }}
-              transition={{ type: 'spring', damping: 12, stiffness: 250 }}
               style={{
                 ...getAspectStyles(),
                 background: '#050505',
@@ -324,136 +768,22 @@ export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack })
                 userSelect: 'none'
               }}
             >
-              {/* Simulated Visual Content */}
-              <div style={{ 
-                position: 'absolute', 
-                inset: 0, 
-                backgroundImage: bgImage ? `url(${bgImage})` : 'none', 
-                backgroundSize: 'cover', 
-                backgroundPosition: 'center',
-                opacity: 0.7,
-                filter: visStyle === 'orbit' ? 'brightness(0.5)' : 'none'
-              }} />
-
-              {/* Dynamic Beat-Synced Glow Overlay */}
-              <motion.div 
-                animate={{ opacity: glowOpacity }}
-                transition={{ duration: 0.1 }}
+              <canvas 
+                ref={canvasRef}
+                width={getCanvasDims().width}
+                height={getCanvasDims().height}
                 style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background: 'radial-gradient(circle, transparent 40%, rgba(244, 63, 94, 0.25) 80%, rgba(0,0,0,0.8) 100%)',
-                  zIndex: 2,
-                  pointerEvents: 'none'
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  display: 'block'
                 }}
               />
 
-              {/* Floating Avee Particles Overlay */}
-              {useParticles && particles.map((p, i) => (
-                <motion.div
-                  key={i}
-                  animate={{ 
-                    y: [0, -450], 
-                    opacity: [0, 0.8, 0],
-                    scale: [1, 1.5 * pulseScale, 0.5] 
-                  }}
-                  transition={{ 
-                    duration: 5 / p.speed, 
-                    repeat: Infinity, 
-                    ease: "linear",
-                    delay: i * 0.4
-                  }}
-                  style={{
-                    position: 'absolute',
-                    left: `${p.x}%`,
-                    bottom: `${p.y - 10}%`,
-                    width: `${p.size}px`,
-                    height: `${p.size}px`,
-                    borderRadius: '50%',
-                    background: '#fff',
-                    boxShadow: '0 0 8px #fff, 0 0 15px #f43f5e',
-                    zIndex: 1,
-                    pointerEvents: 'none'
-                  }}
-                />
-              ))}
-              
               {!bgImage && (
-                <div style={{ color: 'rgba(255,255,255,0.15)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                  <ImageIcon size={32} />
-                  <span style={{ fontSize: '10px', fontWeight: 600 }}>NO ARTWORK</span>
-                </div>
-              )}
-
-              {/* Simulated Waveform Display */}
-              <div style={{ 
-                position: 'absolute', 
-                bottom: aspectRatio === '916' ? '120px' : '40px', 
-                width: '80%', 
-                height: '60px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                gap: '3px',
-                zIndex: 2
-              }}>
-                {visStyle === 'bars' && barHeights.map((h, i) => (
-                  <motion.div 
-                    key={i} 
-                    animate={{ height: `${h}%` }}
-                    transition={{ type: 'spring', damping: 15, stiffness: 200 }}
-                    style={{ 
-                      flex: 1, 
-                      background: 'linear-gradient(to top, #f43f5e, #ec4899)', 
-                      borderRadius: '4px',
-                      opacity: 0.9,
-                      boxShadow: '0 0 10px rgba(244, 63, 94, 0.5)'
-                    }} 
-                  />
-                ))}
-
-                {visStyle === 'wave' && (
-                  <svg viewBox="0 0 200 60" style={{ width: '100%', height: '100%', stroke: '#fff', fill: 'none', filter: 'drop-shadow(0 0 8px #f43f5e)' }}>
-                    <motion.path 
-                      animate={{ d: `M 0,30 Q 50,${30 - barHeights[3]} 100,30 T 200,30` }}
-                      transition={{ type: 'spring', damping: 10 }}
-                      strokeWidth="2.5"
-                      stroke="#f43f5e"
-                    />
-                  </svg>
-                )}
-
-                {visStyle === 'orbit' && (
-                  <motion.div 
-                    animate={{ scale: pulseScale, rotate: 360 }}
-                    transition={{ rotate: { duration: 12, repeat: Infinity, ease: "linear" }, scale: { type: 'spring', damping: 8, stiffness: 250 } }}
-                    style={{ 
-                      width: '100px', 
-                      height: '100px', 
-                      borderRadius: '50%', 
-                      border: '3px solid #f43f5e', 
-                      position: 'absolute', 
-                      bottom: '40px',
-                      boxShadow: '0 0 25px rgba(244, 63, 94, 0.6)',
-                      backgroundImage: bgImage ? `url(${bgImage})` : 'none',
-                      backgroundSize: 'cover'
-                    }}
-                  />
-                )}
-              </div>
-
-              {/* Branding Texts */}
-              {showBranding && (
-                <div style={{ 
-                  position: 'absolute', 
-                  bottom: '24px', 
-                  textAlign: 'center', 
-                  zIndex: 3, 
-                  textShadow: '0 4px 12px rgba(0,0,0,0.9)',
-                  width: '90%'
-                }}>
-                  <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#fff', letterSpacing: '0.05em' }}>{trackTitle}</h3>
-                  <p style={{ fontSize: '10px', fontWeight: 600, color: '#f43f5e', marginTop: '2px' }}>{artistName}</p>
+                <div style={{ position: 'absolute', top: '45%', left: '50%', transform: 'translate(-50%, -50%)', color: 'rgba(255,255,255,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', pointerEvents: 'none' }}>
+                  <ImageIcon size={28} />
+                  <span style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.05em' }}>NO CANVAS ART</span>
                 </div>
               )}
             </motion.div>
@@ -485,15 +815,21 @@ export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack })
                     textAlign: 'center',
                     cursor: 'pointer'
                   }}
-                  onClick={() => setAudioFile('C:/Assets/Drives/Audio/SpaceJamz_Loop.wav')}
+                  onClick={() => {
+                    if (selectedTrack) {
+                      setAudioFile(selectedTrack.filepath);
+                    } else {
+                      alert("Please load an analyzed beat into Content Forge via the Audio Vault details panel first!");
+                    }
+                  }}
                 >
                   {audioFile ? (
                     <div style={{ color: '#10b981', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                      <Play size={12} fill="currentColor" /> SpaceJamz_Loop.wav
+                      <Play size={12} fill="currentColor" /> {audioFile.split(/[\\/]/).pop()}
                     </div>
                   ) : (
                     <div style={{ opacity: 0.6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                      <Upload size={12} /> Click to load track from Vault
+                      <Upload size={12} /> Click to auto-load path from Forge track
                     </div>
                   )}
                 </div>
@@ -700,6 +1036,206 @@ export const ContentForge: React.FC<{ initialTrack?: any }> = ({ initialTrack })
           </div>
 
         </div>
+
+        {/* ==================== DYNAMIC BEAT SEQUENCER & FX DECK (OPTIONAL) ==================== */}
+        <div style={{ 
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          borderRadius: '20px',
+          padding: '24px',
+          marginTop: '32px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <Sparkles size={18} color="#f43f5e" /> Visual Beat Sequencer <span style={{ fontSize: '10px', background: 'rgba(244,63,94,0.15)', color: '#f43f5e', padding: '2px 8px', borderRadius: '4px', marginLeft: '6px' }}>Optional Add-On</span>
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>Tap sequences live while previewing, then quantize triggers to overlay automated flushes, glitch transitions, and bass shakes perfectly synced with track BPM!</p>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', padding: '6px 12px', borderRadius: '6px', color: 'var(--text-secondary)' }}>
+                Tempo: <span style={{ color: '#fff' }}>{bpmVal} BPM</span>
+              </div>
+              
+              <button 
+                onClick={handleQuantize}
+                disabled={tapTriggers.length === 0}
+                style={{ background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#c084fc', fontSize: '11px', fontWeight: 700, padding: '6px 12px', borderRadius: '6px', cursor: tapTriggers.length === 0 ? 'not-allowed' : 'pointer', transition: 'all 0.2s' }}
+              >
+                🪄 Snap to Grid
+              </button>
+
+              <button 
+                onClick={() => setTapTriggers([])}
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff', fontSize: '11px', fontWeight: 700, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
+              >
+                🗑️ Clear FX Markers
+              </button>
+            </div>
+          </div>
+
+          {/* Sequencer Controls HUD */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr', gap: '16px', alignItems: 'center', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px' }}>
+            <button
+              onClick={togglePreviewPlay}
+              style={{
+                background: isPlayingPreview ? 'rgba(244, 63, 94, 0.2)' : 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
+                border: isPlayingPreview ? '1px solid #f43f5e' : 'none',
+                borderRadius: '8px',
+                padding: '10px 20px',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                minWidth: '130px',
+                justifyContent: 'center'
+              }}
+            >
+              {isPlayingPreview ? <Loader2 className="animate-spin" size={14} /> : <Play size={14} fill="currentColor" />}
+              {isPlayingPreview ? 'Stop Preview' : 'Load Preview'}
+            </button>
+
+            <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '8px' }}>
+              {(['flash', 'glitch', 'shake', 'invert'] as const).map(type => (
+                <button 
+                  key={type}
+                  onClick={() => setSelectedFXType(type)}
+                  style={{
+                    background: selectedFXType === type ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    border: 'none',
+                    color: selectedFXType === type ? '#fff' : 'rgba(255,255,255,0.4)',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    textTransform: 'capitalize',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {type === 'flash' && '⚡ Flash'}
+                  {type === 'glitch' && '👾 Glitch'}
+                  {type === 'shake' && '🫨 Shake'}
+                  {type === 'invert' && '🌈 Invert'}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onMouseDown={handleTapRecord}
+              disabled={!isPlayingPreview}
+              style={{
+                background: activeBeatPulse ? '#f43f5e' : (isPlayingPreview ? 'rgba(244, 63, 94, 0.12)' : 'rgba(255,255,255,0.02)'),
+                border: `1px solid ${isPlayingPreview ? '#f43f5e' : 'rgba(255,255,255,0.05)'}`,
+                color: isPlayingPreview ? (activeBeatPulse ? '#fff' : '#f43f5e') : 'rgba(255,255,255,0.2)',
+                padding: '10px',
+                borderRadius: '8px',
+                fontWeight: 800,
+                fontSize: '13px',
+                letterSpacing: '0.05em',
+                cursor: isPlayingPreview ? 'pointer' : 'not-allowed',
+                transition: 'all 0.05s ease',
+                width: '100%',
+                textAlign: 'center',
+                boxShadow: activeBeatPulse ? '0 0 25px rgba(244,63,94,0.5)' : 'none'
+              }}
+            >
+              {isPlayingPreview ? 'PRESS SPACEBAR TO TAP BEAT HITS' : 'LOAD PREVIEW TO START TAPPING'}
+            </button>
+          </div>
+
+          {/* Digital Piano Roll Timeline */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div 
+              onClick={handleTimelineScrub}
+              style={{
+                height: '70px',
+                background: 'rgba(0,0,0,0.4)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '12px',
+                position: 'relative',
+                overflow: 'hidden',
+                cursor: 'crosshair'
+              }}
+            >
+              {/* Tempo Grid Marks */}
+              {beatTicks.map((tick, i) => (
+                <div 
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    left: `${(tick / totalDuration) * 100}%`,
+                    top: 0,
+                    width: '1px',
+                    height: i % 4 === 0 ? '100%' : '35%',
+                    background: i % 4 === 0 ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)',
+                    pointerEvents: 'none'
+                  }}
+                />
+              ))}
+
+              {/* Plotted Event Sequences */}
+              {tapTriggers.map(t => {
+                const leftPos = (t.time / totalDuration) * 100;
+                const color = t.type === 'flash' ? '#fff' : t.type === 'glitch' ? '#06b6d4' : t.type === 'shake' ? '#f97316' : '#d946ef';
+                return (
+                  <div 
+                    key={t.id}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      setTapTriggers(prev => prev.filter(prevT => prevT.id !== t.id));
+                    }}
+                    title={`Double-click to delete ${t.type}`}
+                    style={{
+                      position: 'absolute',
+                      left: `${leftPos}%`,
+                      top: '10%',
+                      height: '80%',
+                      width: '6px',
+                      marginLeft: '-3px',
+                      borderRadius: '3px',
+                      background: color,
+                      boxShadow: `0 0 10px ${color}`,
+                      cursor: 'pointer',
+                      transition: 'all 0.1s ease'
+                    }}
+                  />
+                );
+              })}
+
+              {/* Kinetic Playhead */}
+              <div 
+                style={{
+                  position: 'absolute',
+                  left: `${(currentTime / totalDuration) * 100}%`,
+                  top: 0,
+                  width: '2px',
+                  height: '100%',
+                  background: '#f43f5e',
+                  boxShadow: '0 0 12px #f43f5e',
+                  pointerEvents: 'none'
+                }}
+              />
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)', padding: '0 6px', fontWeight: 700 }}>
+              <span>0.0s</span>
+              <span>3.75s</span>
+              <span>7.50s (Mid-Point)</span>
+              <span>11.25s</span>
+              <span>15.0s (Loop Out)</span>
+            </div>
+          </div>
+
+        </div>
+        </>
         )}
 
         {activeTab === 'social' && (

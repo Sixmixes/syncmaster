@@ -118,6 +118,61 @@ ipcMain.handle('close-app', () => {
   mainWindow?.close();
 });
 
+ipcMain.handle('mux-video-audio', async (event, data: { videoBase64: string, audioPath: string }) => {
+  try {
+    const videoBuffer = Buffer.from(data.videoBase64, 'base64');
+    const tempVideoPath = path.join(os.tmpdir(), `syncmaster_forge_${Date.now()}.webm`);
+    fs.writeFileSync(tempVideoPath, videoBuffer);
+    
+    const downloadsPath = app.getPath('downloads');
+    const audioExt = path.extname(data.audioPath);
+    const audioName = path.basename(data.audioPath, audioExt);
+    
+    // Save to standard downloads directory as mp4
+    const outputFilename = `${audioName}_Visualizer_${Date.now()}.mp4`;
+    const finalOutputPath = path.join(downloadsPath, outputFilename);
+
+    return new Promise((resolve) => {
+      const ffmpegPath = ffmpegStatic || 'ffmpeg';
+      
+      // Re-encode raw WebM stream to H.264 with constant rate factor 22 for highly optimized compression ratio
+      const args = [
+        '-y',
+        '-i', tempVideoPath,
+        '-i', data.audioPath,
+        '-c:v', 'libx264',
+        '-preset', 'fast',
+        '-crf', '22',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-shortest', 
+        finalOutputPath
+      ];
+
+      const ffmpegProcess = spawn(ffmpegPath, args);
+      let errorData = '';
+
+      ffmpegProcess.stderr.on('data', (chunk) => {
+        errorData += chunk.toString();
+      });
+
+      ffmpegProcess.on('close', (code) => {
+        // Clean up temporary raw webm footage
+        try { fs.unlinkSync(tempVideoPath); } catch(e) {}
+        
+        if (code === 0) {
+          resolve({ success: true, outputPath: finalOutputPath });
+        } else {
+          console.error("FFMPEG ENCODE FAIL:", errorData);
+          resolve({ success: false, error: `FFmpeg encoding error: ${errorData}` });
+        }
+      });
+    });
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
 // === SYNCMASTER V2 NEW IPC HANDLERS ===
 ipcMain.handle('db-search', async (event, query: string, genre?: string) => {
   try {

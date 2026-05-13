@@ -18,6 +18,7 @@ import { ipcRenderer, webUtils } from 'electron';
   findAcapellas: () => ipcRenderer.invoke('find-acapellas'),
   clearDatabaseCache: () => ipcRenderer.invoke('clear-db'),
   analyzeVaultFile: (fileId: number, filePath: string) => ipcRenderer.invoke('analyze-vault-file', fileId, filePath),
+  muxVideoAudio: (data: { videoBase64: string, audioPath: string }) => ipcRenderer.invoke('mux-video-audio', data),
   harvestAcapellas: (files: any[], targetDir: string, options: any) => ipcRenderer.invoke('harvest-acapellas', files, targetDir, options),
   onScanProgress: (callback: any) => {
     const subscription = (_event: any, data: any) => callback(data);

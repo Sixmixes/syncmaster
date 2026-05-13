@@ -14,6 +14,17 @@ declare global {
       readAudioFile: (filePath: string) => Promise<{ success: boolean; data?: string; mimeType?: string; error?: string }>;
       updateMetadata: (filePath: string, data: any) => Promise<{ success: boolean; newPath?: string; newName?: string; error?: string }>;
       resolveFilePath: (file: any) => string;
+      
+      // SyncMaster Pro V2 Extended API Hooks
+      dbSearch: (query: string, genre?: string) => Promise<any>;
+      scanAllDrives: (target?: string) => Promise<any>;
+      selectDirectory: () => Promise<string | undefined>;
+      findAcapellas: () => Promise<any>;
+      clearDatabaseCache: () => Promise<{ success: boolean; error?: string }>;
+      analyzeVaultFile: (fileId: number, filePath: string) => Promise<any>;
+      muxVideoAudio: (data: { videoBase64: string, audioPath: string }) => Promise<any>;
+      harvestAcapellas: (files: any[], targetDir: string, options: any) => Promise<any>;
+      onScanProgress: (callback: (data: any) => void) => () => void;
     };
   }
 }

@@ -3,19 +3,8 @@ import sys
 import json
 import sqlite3
 import time
-from mutagen import File as MutagenFile
-
-def get_duration(path):
-    try:
-        audio = MutagenFile(path)
-        if audio is not None and audio.info is not None:
-            return audio.info.length
-    except Exception:
-        pass
-    return 0
 
 def scan_drives(target_root, db_path):
-    MIN_DURATION = 60.0 # Minimum seconds requirement
     # Supported Audio Extensions ONLY
     AUDIO_EXTS = {'.mp3', '.wav', '.m4a'}
     
@@ -81,14 +70,10 @@ def scan_drives(target_root, db_path):
                     full_path = os.path.join(root, file)
                     try:
                         stat = os.stat(full_path)
-                        # Pre-gate: If file is < 100KB, it's almost definitely not 60s long. 
-                        # Skip to save mutagen file opening IO penalty.
-                        if stat.st_size < 100000:
-                            continue
-                            
-                        # Precise Duration Check
-                        duration = get_duration(full_path)
-                        if duration < MIN_DURATION:
+                        # Approximate Duration Check via sizing:
+                        # 60s at 128kbps MP3 ~960KB. Let's block anything < 800KB (800,000 bytes) 
+                        # to instantly drop small 1-shot drum hits without heavy IO headers logic.
+                        if stat.st_size < 800000:
                             continue
 
                         batch_buffer.append((

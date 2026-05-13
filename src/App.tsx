@@ -123,7 +123,7 @@ function App() {
       case 'forge': return <ContentForge initialTrack={forgeTrack} />;
       case 'nexus': return <NetworkNexus />;
       case 'radar': return <OpportunityRadar />;
-      case 'dashboard': return <DashboardPanel onNavigate={setActiveModule} />;
+      case 'dashboard': return <DashboardPanel onNavigate={(module: any) => setActiveModule(module)} />;
       case 'settings': return <SettingsPanel />;
       default: return <FileOrganizer onPlayTrack={handlePlayTrack} activeTrackId={activeTrack?.id} />;
     }

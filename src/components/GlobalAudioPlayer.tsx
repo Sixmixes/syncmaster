@@ -43,7 +43,6 @@ export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({ filePath, 
       barRadius: 3,
       height: 48,
       normalize: true,
-      responsive: true,
       // backend: 'WebAudio' <- Omit this so WaveSurfer defaults to 'MediaElement' which supports native AudioSource nodes!
     });
 

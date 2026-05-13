@@ -29,6 +29,21 @@ def analyze_audio(file_path):
         tempo = librosa.feature.tempo(onset_envelope=onset_env, sr=sr, aggregate=np.median)
         bpm = float(tempo[0]) if isinstance(tempo, (list, np.ndarray)) else float(tempo)
         
+        # === NEW: Real Transient / Onset Detection (for Content Forge Sequencer) ===
+        # Load exactly the first 15 seconds (preview duration) to ensure timestamp alignment is 100% perfect.
+        y_transient, sr_trans = librosa.load(file_path, duration=15.0)
+        _, y_trans_percussive = librosa.effects.hpss(y_transient)
+        trans_onset_env = librosa.onset.onset_strength(y=y_trans_percussive, sr=sr_trans)
+        onset_times = librosa.onset.onset_detect(
+            onset_envelope=trans_onset_env,
+            sr=sr_trans,
+            units='time',
+            hop_length=512,
+            backtrack=True,
+            delta=0.1
+        )
+        onset_list = [float(t) for t in onset_times]
+        
         # --- Krumhansl-Schmuckler Key Detection Algorithm ---
         # Highly accurate Pearson-Correlation based profile matching for major/minor keys
         # We use the HARMONIC part to avoid drum transients messing up the pitch classes
@@ -187,7 +202,9 @@ def analyze_audio(file_path):
             "type": track_type,
             "has_vocals": has_vocals,
             "filename": os.path.basename(file_path),
-            "duration": true_duration
+            "duration": true_duration,
+            "transients": onset_list,
+            "transient_count": len(onset_list)
         }
         print(json.dumps(result))
         

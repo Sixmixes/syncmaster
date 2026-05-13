@@ -6,6 +6,7 @@ import os from 'os';
 import NodeID3 from 'node-id3';
 import { fileURLToPath, pathToFileURL } from 'url';
 import ffmpegStatic from 'ffmpeg-static';
+import { initDatabase, getDbPath, searchAudio, findAcapellas, clearDatabase, updateAudioMetadata } from './db';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,7 +51,10 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Boot local SQL database cache
+  await initDatabase().catch(console.error);
+
   protocol.handle('media', (request) => {
     try {
       const filePath = decodeURIComponent(request.url.slice('media://'.length));
@@ -112,6 +116,137 @@ ipcMain.handle('maximize-app', () => {
 
 ipcMain.handle('close-app', () => {
   mainWindow?.close();
+});
+
+// === SYNCMASTER V2 NEW IPC HANDLERS ===
+ipcMain.handle('db-search', async (event, query: string, genre?: string) => {
+  try {
+    return await searchAudio(query, genre);
+  } catch (err: any) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('find-acapellas', async () => {
+  try {
+    return await findAcapellas();
+  } catch (err: any) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('clear-db', async () => {
+  try {
+    await clearDatabase();
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('harvest-acapellas', async (event, files: any[], targetDir: string, options: { mode: 'copy' | 'move', groupByGenre: boolean }) => {
+  const results = [];
+  
+  if (!fs.existsSync(targetDir)) {
+    try {
+      fs.mkdirSync(targetDir, { recursive: true });
+    } catch (err: any) {
+      return { success: false, error: `Could not create target directory: ${err.message}` };
+    }
+  }
+
+  for (const file of files) {
+    try {
+      if (!fs.existsSync(file.filepath)) {
+        results.push({ filepath: file.filepath, success: false, error: 'File not found on disk' });
+        continue;
+      }
+
+      // Strictly block Studio One project folders in addition to the DB query filter
+      if (file.filepath.toLowerCase().includes('studio one') || file.filepath.toLowerCase().includes('studioone')) {
+        results.push({ filepath: file.filepath, success: false, error: 'Ignored DAW project system exclusion' });
+        continue;
+      }
+
+      let destParent = targetDir;
+      if (options.groupByGenre) {
+        const genreFolder = file.genre ? formatGenre(file.genre) : 'UNCATEGORIZED';
+        destParent = path.join(targetDir, genreFolder);
+        if (!fs.existsSync(destParent)) {
+          fs.mkdirSync(destParent, { recursive: true });
+        }
+      }
+
+      const ext = path.extname(file.filepath);
+      const baseName = path.basename(file.filepath, ext);
+      let targetName = path.basename(file.filepath);
+      let destPath = path.join(destParent, targetName);
+      
+      // Collision avoidance matrix
+      let counter = 2;
+      while (fs.existsSync(destPath)) {
+        targetName = `${baseName}_V${counter}${ext}`;
+        destPath = path.join(destParent, targetName);
+        counter++;
+      }
+
+      if (options.mode === 'move') {
+        // Use our cross-device safe move operator
+        moveFileSafe(file.filepath, destPath);
+      } else {
+        fs.copyFileSync(file.filepath, destPath);
+      }
+
+      results.push({ filepath: file.filepath, success: true, destination: destPath });
+    } catch (err: any) {
+      results.push({ filepath: file.filepath, success: false, error: err.message });
+    }
+  }
+
+  return { success: true, results };
+});
+
+ipcMain.handle('select-directory', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    properties: ['openDirectory']
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle('scan-all-drives', async (event, targetPath?: string) => {
+  return new Promise((resolve) => {
+    const driveToScan = targetPath || 'C:\\';
+    const dbPath = getDbPath();
+    
+    const isDev = !app.isPackaged;
+    const baseDir = isDev ? app.getAppPath() : process.resourcesPath;
+    const scannerScript = path.join(baseDir, 'python-engine', 'full_drive_scanner.py');
+    
+    const pyProcess = spawn('python', [scannerScript, driveToScan, dbPath]);
+    
+    pyProcess.stdout.on('data', (data) => {
+      const raw = data.toString();
+      try {
+        // Forward real-time parsing updates to Frontend window
+        const parsed = JSON.parse(raw);
+        mainWindow?.webContents.send('scan-progress', parsed);
+      } catch (e) {
+        // Handle multiple buffered lines
+        raw.split('\n').filter(Boolean).forEach(line => {
+           try { mainWindow?.webContents.send('scan-progress', JSON.parse(line)); } catch(err){}
+        });
+      }
+    });
+
+    pyProcess.stderr.on('data', (data) => {
+      console.error(`SCANNER ERR: ${data.toString()}`);
+    });
+
+    pyProcess.on('close', (code) => {
+      resolve({ success: code === 0 });
+    });
+  });
 });
 
 function resolveActualPath(filePath: string): string {
@@ -467,6 +602,21 @@ ipcMain.handle('update-metadata', async (event, filePath: string, data: any) => 
     return { success: true, newPath, newName: finalName };
   } catch (err: any) {
     writeToLog(`update-metadata failed for ${filePath}: ${err.message}`);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('analyze-vault-file', async (event, fileId: number, filePath: string) => {
+  try {
+    const data = await getAudioMetadata(filePath);
+    await updateAudioMetadata(fileId, {
+      bpm: data.bpm,
+      key: data.key,
+      genre: data.genre,
+      has_vocals: data.has_vocals
+    });
+    return { success: true, data };
+  } catch (err: any) {
     return { success: false, error: err.message };
   }
 });

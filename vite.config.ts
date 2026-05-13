@@ -14,7 +14,7 @@ export default defineConfig({
         vite: {
           build: {
             rollupOptions: {
-              external: ['fs', 'path', 'child_process', 'os', 'node-id3', 'electron', 'ffmpeg-static'],
+              external: ['fs', 'path', 'child_process', 'os', 'node-id3', 'electron', 'ffmpeg-static', 'sqlite3'],
             },
           },
         },

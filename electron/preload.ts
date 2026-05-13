@@ -12,4 +12,16 @@ import { ipcRenderer, webUtils } from 'electron';
   resolveFilePath: (file: any) => webUtils.getPathForFile(file),
   readAudioFile: (filePath: string) => ipcRenderer.invoke('read-audio-file', filePath),
   updateMetadata: (filePath: string, data: any) => ipcRenderer.invoke('update-metadata', filePath, data),
+  dbSearch: (query: string, genre?: string) => ipcRenderer.invoke('db-search', query, genre),
+  scanAllDrives: (target?: string) => ipcRenderer.invoke('scan-all-drives', target),
+  selectDirectory: () => ipcRenderer.invoke('select-directory'),
+  findAcapellas: () => ipcRenderer.invoke('find-acapellas'),
+  clearDatabaseCache: () => ipcRenderer.invoke('clear-db'),
+  analyzeVaultFile: (fileId: number, filePath: string) => ipcRenderer.invoke('analyze-vault-file', fileId, filePath),
+  harvestAcapellas: (files: any[], targetDir: string, options: any) => ipcRenderer.invoke('harvest-acapellas', files, targetDir, options),
+  onScanProgress: (callback: any) => {
+    const subscription = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('scan-progress', subscription);
+    return () => ipcRenderer.removeListener('scan-progress', subscription);
+  }
 };

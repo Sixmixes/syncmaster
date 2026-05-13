@@ -99,6 +99,13 @@ export function initDatabase(isRetrying = false): Promise<void> {
                     db?.run("ALTER TABLE audio_files ADD COLUMN viral_score INTEGER", () => {});
                     db?.run("ALTER TABLE audio_files ADD COLUMN type TEXT", () => {});
                     
+                    db?.run(`
+                        CREATE TABLE IF NOT EXISTS ignored_paths (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            pattern TEXT UNIQUE
+                        )
+                    `);
+                    
                     db?.run(`CREATE INDEX IF NOT EXISTS idx_filename ON audio_files(filename)`);
                     db?.run(`CREATE INDEX IF NOT EXISTS idx_genre ON audio_files(genre)`);
 
@@ -296,6 +303,33 @@ export function updateAudioMetadata(id: number, data: {
         ], (err) => {
             if (err) reject(err);
             else resolve();
+        });
+    });
+}
+
+export function addIgnoredPath(pattern: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject('DB not initialized');
+        db.serialize(() => {
+            // Insert the path to exclude permanently from walks
+            db?.run('INSERT OR IGNORE INTO ignored_paths (pattern) VALUES (?)', [pattern], (err) => {
+                if (err) return reject(err);
+            });
+            // Wipe matching indexed tracks from the UI instantly so user sees them vanish!
+            db?.run('DELETE FROM audio_files WHERE INSTR(LOWER(filepath), LOWER(?)) > 0', [pattern], (err) => {
+                if (err) return reject(err);
+                resolve();
+            });
+        });
+    });
+}
+
+export function getIgnoredPaths(): Promise<string[]> {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject('DB not initialized');
+        db.all('SELECT pattern FROM ignored_paths', [], (err, rows: any[]) => {
+            if (err) reject(err);
+            else resolve((rows || []).map(r => r.pattern));
         });
     });
 }

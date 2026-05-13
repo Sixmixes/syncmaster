@@ -21,6 +21,8 @@ import { ipcRenderer, webUtils } from 'electron';
   muxVideoAudio: (data: { videoBase64: string, audioPath: string }) => ipcRenderer.invoke('mux-video-audio', data),
   harvestAcapellas: (files: any[], targetDir: string, options: any) => ipcRenderer.invoke('harvest-acapellas', files, targetDir, options),
   saveMarketingPack: (filePath: string, content: string) => ipcRenderer.invoke('save-marketing-pack', filePath, content),
+  excludePath: (pathPattern: string) => ipcRenderer.invoke('exclude-path', pathPattern),
+  getIgnoredPaths: () => ipcRenderer.invoke('get-ignored-paths'),
   onScanProgress: (callback: any) => {
     const subscription = (_event: any, data: any) => callback(data);
     ipcRenderer.on('scan-progress', subscription);

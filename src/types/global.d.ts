@@ -24,6 +24,9 @@ declare global {
       analyzeVaultFile: (fileId: number, filePath: string) => Promise<any>;
       muxVideoAudio: (data: { videoBase64: string, audioPath: string }) => Promise<any>;
       harvestAcapellas: (files: any[], targetDir: string, options: any) => Promise<any>;
+      saveMarketingPack: (filePath: string, content: string) => Promise<any>;
+      excludePath: (pathPattern: string) => Promise<{ success: boolean; error?: string }>;
+      getIgnoredPaths: () => Promise<{ success: boolean; paths?: string[]; error?: string }>;
       onScanProgress: (callback: (data: any) => void) => () => void;
     };
   }

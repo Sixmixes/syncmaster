@@ -12,7 +12,8 @@ def scan_drives(target_root, db_path):
     EXCLUDE_DIRS = {
         'windows', 'program files', 'program files (x86)', 'appdata',
         'node_modules', '$recycle.bin', 'system volume information',
-        '.git', '__pycache__', 'cache', 'logs'
+        '.git', '__pycache__', 'cache', 'logs', 'dist', 'build',
+        'src', 'projects', 'code', '.next', 'env', 'venv', '.venv', '.vscode', 'out'
     }
 
     # Setup Database connection with longer timeout for concurrency
@@ -41,6 +42,16 @@ def scan_drives(target_root, db_path):
     cursor.execute('DELETE FROM audio_files;')
     conn.commit()
 
+    # Load dynamic, persistent custom exclusions registered by the operator
+    dynamic_ignored_patterns = []
+    try:
+        cursor.execute('CREATE TABLE IF NOT EXISTS ignored_paths (id INTEGER PRIMARY KEY AUTOINCREMENT, pattern TEXT UNIQUE);')
+        conn.commit()
+        cursor.execute('SELECT pattern FROM ignored_paths;')
+        dynamic_ignored_patterns = [row[0].lower().replace('/', '\\') for row in cursor.fetchall() if row[0]]
+    except Exception as e:
+        pass
+
     print(json.dumps({"status": "starting", "message": f"Initiating scan of {target_root}"}))
     sys.stdout.flush()
 
@@ -54,6 +65,12 @@ def scan_drives(target_root, db_path):
 
     try:
         for root, dirs, files in os.walk(target_root, topdown=True):
+            # Real-time performance booster: Proactively prune custom user-ignored branches
+            normalized_root = root.lower().replace('/', '\\')
+            if any(pat in normalized_root for pat in dynamic_ignored_patterns):
+                dirs[:] = []  # Instruct walk to instantly cease recursive deep searching down this stem
+                continue
+
             # Prune systemic noise and DAW cache folders to ensure extreme clean indexing
             dirs[:] = [
                 d for d in dirs 

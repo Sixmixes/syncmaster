@@ -194,6 +194,47 @@ export const AudioVaultSearch: React.FC<{
         setSelectedIds(new Set());
     };
 
+    const handleExcludeSelected = async () => {
+        if (!window.api?.excludePath || selectedIds.size === 0) return;
+        
+        const selectedItems = results.filter(r => selectedIds.has(r.id));
+        if (selectedItems.length === 0) return;
+        
+        const isMultiple = selectedItems.length > 1;
+        const confirmMsg = isMultiple
+            ? `Shield System Engagement:\n\nAre you absolute sure you want to permanently hide all folders containing these ${selectedItems.length} tracks from ever being scanned or indexed again?\n\n(This protects your code/project directories permanently)`
+            : `Shield System Engagement:\n\nAre you sure you want to permanently hide the parent folder containing "${selectedItems[0].filename}" from future system indexing?\n\nPath: ${selectedItems[0].filepath}`;
+
+        if (!confirm(confirmMsg)) return;
+
+        try {
+            const uniqueDirs = new Set<string>();
+            selectedItems.forEach(item => {
+                const lastSlash = Math.max(item.filepath.lastIndexOf('/'), item.filepath.lastIndexOf('\\'));
+                if (lastSlash > 0) {
+                    uniqueDirs.add(item.filepath.substring(0, lastSlash));
+                } else {
+                    uniqueDirs.add(item.filepath);
+                }
+            });
+
+            for (const dirPath of Array.from(uniqueDirs)) {
+                await window.api.excludePath(dirPath);
+            }
+
+            alert(`🛡️ Indexing Shield Enabled!\n\nSuccessfully excluded ${uniqueDirs.size} directories. These branches have been safely purged from your index and will never be indexed again.`);
+            
+            // Wipe local results instantly to prevent laggy waiting
+            setResults(prev => prev.filter(r => !selectedIds.has(r.id)));
+            setSelectedIds(new Set());
+            
+            // Trigger real re-search silently
+            setTimeout(() => performSearch(query), 100);
+        } catch (e: any) {
+            alert(`Shield failure: ${e.message}`);
+        }
+    };
+
     const handleOpenHarvester = async () => {
         if (!window.api?.findAcapellas) return;
         setShowHarvester(true);
@@ -308,6 +349,29 @@ export const AudioVaultSearch: React.FC<{
                             >
                                 <FileSymlink size={18} />
                                 <span style={{ fontWeight: 700 }}>Load {selectedIds.size} Tracks to Organizer</span>
+                            </motion.button>
+                        )}
+
+                        {selectedIds.size > 0 && (
+                            <motion.button
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                onClick={handleExcludeSelected}
+                                className="btn"
+                                style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '8px', 
+                                    padding: '12px 18px',
+                                    background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(185, 28, 28, 0.1) 100%)',
+                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                    boxShadow: '0 0 15px rgba(239, 68, 68, 0.15)',
+                                    color: '#fca5a5',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <ShieldCheck size={18} />
+                                <span style={{ fontWeight: 600 }}>Shield & Hide Folder</span>
                             </motion.button>
                         )}
                         

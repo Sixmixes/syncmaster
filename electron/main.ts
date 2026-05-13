@@ -6,7 +6,7 @@ import os from 'os';
 import NodeID3 from 'node-id3';
 import { fileURLToPath, pathToFileURL } from 'url';
 import ffmpegStatic from 'ffmpeg-static';
-import { initDatabase, getDbPath, searchAudio, findAcapellas, clearDatabase, updateAudioMetadata } from './db';
+import { initDatabase, getDbPath, searchAudio, findAcapellas, clearDatabase, updateAudioMetadata, addIgnoredPath, getIgnoredPaths } from './db';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -194,6 +194,24 @@ ipcMain.handle('clear-db', async () => {
   try {
     await clearDatabase();
     return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('exclude-path', async (event, pathPattern: string) => {
+  try {
+    await addIgnoredPath(pathPattern);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('get-ignored-paths', async () => {
+  try {
+    const paths = await getIgnoredPaths();
+    return { success: true, paths };
   } catch (err: any) {
     return { success: false, error: err.message };
   }

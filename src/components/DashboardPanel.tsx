@@ -173,9 +173,9 @@ export const DashboardPanel: React.FC<{
             className="nav-hover"
           >
             <Users size={32} color="#10b981" style={{ marginBottom: '16px' }} />
-            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>Network Nexus</h3>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>Promo & Pitch Nexus</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.5 }}>
-              Manage collaborations, sync with team members, and distribute your finalized audio vaults seamlessly.
+              Assemble curated release beat packs, generate professional A&R sync pitch briefs, and format one-click platform-optimized social media content.
             </p>
           </div>
 

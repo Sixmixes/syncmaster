@@ -90,7 +90,7 @@ function App() {
     { id: 'organizer', icon: Music, label: 'Organize & Tag' },
     { id: 'vault', icon: Database, label: 'Audio Vault' },
     { id: 'forge', icon: Hammer, label: 'Content Forge' },
-    { id: 'nexus', icon: Users, label: 'Network Nexus' },
+    { id: 'nexus', icon: Users, label: 'Promo & Pitch Nexus' },
     { id: 'radar', icon: Radar, label: 'Opportunity Radar' },
   ];
 

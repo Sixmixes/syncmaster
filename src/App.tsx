@@ -85,6 +85,10 @@ function App() {
     setActiveModule('forge');
   };
 
+  const handleSendToNexus = () => {
+    setActiveModule('nexus');
+  };
+
   const navItems = [
     { id: 'dashboard', icon: LayoutGrid, label: 'Dashboard' },
     { id: 'organizer', icon: Music, label: 'Organize & Tag' },
@@ -249,6 +253,9 @@ function App() {
           filePath={activeTrack.filepath} 
           fileName={activeTrack.filename} 
           onClose={() => setActiveTrack(null)} 
+          onSendToOrganizer={handleSendToOrganizer}
+          onSendToForge={() => handleSendToForge(activeTrack)}
+          onSendToNexus={handleSendToNexus}
         />
       )}
     </div>

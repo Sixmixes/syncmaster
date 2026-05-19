@@ -1,15 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
-import { Play, Pause, Volume2, SkipBack, X, Disc, VolumeX } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Play, Pause, Volume2, SkipBack, X, Disc, VolumeX, Zap, Tag, FolderDown, ArrowUpRight, Hammer } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface GlobalAudioPlayerProps {
   filePath: string;
   fileName: string;
   onClose: () => void;
+  onSendToOrganizer?: (paths: string[]) => void;
+  onSendToForge?: (track: any) => void;
+  onSendToNexus?: (track: any) => void;
 }
-
-export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({ filePath, fileName, onClose }) => {
+export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({ 
+  filePath, 
+  fileName, 
+  onClose,
+  onSendToOrganizer,
+  onSendToForge,
+  onSendToNexus
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurfer = useRef<WaveSurfer | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -18,6 +27,7 @@ export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({ filePath, 
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showQuickOrganize, setShowQuickOrganize] = useState(false);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -296,6 +306,87 @@ export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({ filePath, 
             cursor: 'pointer'
           }}
         />
+      </div>
+
+      {/* Quick Organize Button & Popover */}
+      <div style={{ position: 'relative' }}>
+        <AnimatePresence>
+          {showQuickOrganize && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              style={{
+                position: 'absolute',
+                bottom: '50px',
+                right: '0',
+                background: 'rgba(20, 21, 26, 0.95)',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(168, 85, 247, 0.4)',
+                borderRadius: '16px',
+                padding: '16px',
+                width: '340px',
+                boxShadow: '0 -10px 40px rgba(0,0,0,0.5), 0 0 20px rgba(168, 85, 247, 0.2)',
+                zIndex: 1000,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}
+            >
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Zap size={16} color="#fbbf24" /> Quick Organize Mode
+              </div>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                Make a split-second decision while the track plays to instantly tag or route it into your pipelines.
+              </p>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
+                <button 
+                  onClick={() => { onSendToOrganizer && onSendToOrganizer([filePath]); setShowQuickOrganize(false); }}
+                  style={{ background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: '8px', padding: '10px', color: '#c084fc', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', transition: 'all 0.2s' }} 
+                  className="nav-hover"
+                >
+                  <Tag size={14} /> Send to Tagger
+                </button>
+                <button 
+                  onClick={() => { onSendToForge && onSendToForge({}); setShowQuickOrganize(false); }}
+                  style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', padding: '10px', color: '#34d399', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', transition: 'all 0.2s' }} 
+                  className="nav-hover"
+                >
+                  <Hammer size={14} /> Content Forge
+                </button>
+                <button 
+                  onClick={() => { onSendToNexus && onSendToNexus({}); setShowQuickOrganize(false); }}
+                  style={{ gridColumn: '1 / -1', background: 'rgba(236,72,153,0.1)', border: '1px solid rgba(236,72,153,0.3)', borderRadius: '8px', padding: '10px', color: '#f472b6', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', transition: 'all 0.2s' }} 
+                  className="nav-hover"
+                >
+                  <ArrowUpRight size={14} /> Send to Pitch & Promo Nexus
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <button 
+          onClick={() => setShowQuickOrganize(!showQuickOrganize)}
+          style={{ 
+            background: showQuickOrganize ? 'rgba(168, 85, 247, 0.2)' : 'rgba(255,255,255,0.05)', 
+            border: '1px solid rgba(255,255,255,0.1)', 
+            color: showQuickOrganize ? '#c084fc' : 'var(--text-secondary)', 
+            borderRadius: '20px', 
+            padding: '6px 14px', 
+            fontSize: '12px', 
+            fontWeight: 600, 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '6px',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+          className="nav-hover"
+        >
+          <Zap size={14} fill={showQuickOrganize ? "currentColor" : "none"} /> Quick Route
+        </button>
       </div>
 
       {/* Close player button */}

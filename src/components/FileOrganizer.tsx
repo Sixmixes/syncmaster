@@ -99,6 +99,89 @@ function clientGenerateFileName(title: string, genre: string, key: string, bpm: 
   return newName + ext;
 }
 
+function getNormalizedBaseName(filename: string): string {
+  const extMatch = filename.match(/\.[^.]+$/);
+  const ext = extMatch ? extMatch[0] : '';
+  const base = ext ? filename.slice(0, -ext.length) : filename;
+  
+  return base
+    .replace(/(?:\s*\(\d+\))|(?:\s*-\s*Copy(?:\s*\(\d+\))?)$/gi, '')
+    .trim();
+}
+
+function applySmartVersioning(items: ProcessedFile[], renameTemplate: string, globalArtist: string): ProcessedFile[] {
+  const groups: Record<string, ProcessedFile[]> = {};
+  
+  for (const item of items) {
+    const norm = getNormalizedBaseName(item.originalName);
+    if (!groups[norm]) {
+      groups[norm] = [];
+    }
+    groups[norm].push(item);
+  }
+  
+  const updatedItems = [...items];
+  
+  for (const norm in groups) {
+    const group = groups[norm];
+    
+    group.sort((a, b) => a.originalName.localeCompare(b.originalName, undefined, { numeric: true, sensitivity: 'base' }));
+    
+    const seenHashes = new Set<string>();
+    let versionCounter = 1;
+    
+    for (const file of group) {
+      if (file.metadata?.alreadyInVault) {
+        continue;
+      }
+      
+      const hash = file.metadata?.hash;
+      if (hash) {
+        if (seenHashes.has(hash)) {
+          continue;
+        }
+        seenHashes.add(hash);
+        
+        if (versionCounter === 1) {
+          versionCounter++;
+        } else {
+          const baseTitle = file.metadata?.title || norm;
+          const versionedTitle = `${baseTitle} v${versionCounter}`;
+          
+          if (file.metadata) {
+            const meta = { ...file.metadata, title: versionedTitle };
+            const generatedName = clientGenerateFileName(
+              meta.title,
+              meta.genre,
+              meta.key,
+              meta.bpm,
+              file.originalName,
+              renameTemplate,
+              globalArtist || meta.artist,
+              meta.trackType
+            );
+            
+            const idx = updatedItems.findIndex(item => item.id === file.id);
+            if (idx !== -1) {
+              updatedItems[idx] = {
+                ...updatedItems[idx],
+                newName: generatedName,
+                metadata: {
+                  ...updatedItems[idx].metadata!,
+                  title: versionedTitle
+                }
+              };
+            }
+          }
+          versionCounter++;
+        }
+      }
+    }
+  }
+  
+  return updatedItems;
+}
+
 export const FileOrganizer = ({ 
   initialFilePaths, 
   onInitialHandled,
@@ -167,16 +250,19 @@ export const FileOrganizer = ({
           try {
             const results = await window.api.analyzeFiles([entry.originalPath], globalMetadata);
             const result = results[0];
-            setFiles(current => current.map(curr => {
-              if (curr.id === entry.id) {
-                if (result && result.success) {
-                  return { ...curr, status: 'staged', metadata: result.metadata, newName: result.newName || curr.originalName };
-                } else {
-                  return { ...curr, status: 'error', error: result?.error || "Failed analysis" };
+            setFiles(current => {
+              const updated = current.map(curr => {
+                if (curr.id === entry.id) {
+                  if (result && result.success) {
+                    return { ...curr, status: 'staged', metadata: result.metadata, newName: result.newName || curr.originalName } as ProcessedFile;
+                  } else {
+                    return { ...curr, status: 'error', error: result?.error || "Failed analysis" } as ProcessedFile;
+                  }
                 }
-              }
-              return curr;
-            }));
+                return curr;
+              });
+              return applySmartVersioning(updated, globalMetadata.renameTemplate, globalMetadata.artist);
+            });
           } catch (err: any) {
             console.error("Bridge import analysis failure", entry.originalPath, err);
             setFiles(current => current.map(curr => curr.id === entry.id ? { ...curr, status: 'error', error: err.message } : curr));

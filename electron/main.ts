@@ -4,9 +4,10 @@ import fs from 'fs';
 import { spawn } from 'child_process';
 import os from 'os';
 import NodeID3 from 'node-id3';
+import crypto from 'crypto';
 import { fileURLToPath, pathToFileURL } from 'url';
 import ffmpegStatic from 'ffmpeg-static';
-import { initDatabase, getDbPath, searchAudio, findAcapellas, clearDatabase, updateAudioMetadata, addIgnoredPath, getIgnoredPaths } from './db';
+import { initDatabase, getDbPath, searchAudio, findAcapellas, clearDatabase, updateAudioMetadata, addIgnoredPath, getIgnoredPaths, checkDuplicateInDb } from './db';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -322,6 +323,35 @@ ipcMain.handle('scan-all-drives', async (event, targetPath?: string) => {
   });
 });
 
+function getFileHashAndSize(filePath: string): Promise<{ hash: string, size: number }> {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!fs.existsSync(filePath)) {
+        return resolve({ hash: '', size: 0 });
+      }
+      const stat = fs.statSync(filePath);
+      const size = stat.size;
+      
+      const hash = crypto.createHash('md5');
+      const stream = fs.createReadStream(filePath);
+      
+      stream.on('data', (data) => {
+        hash.update(data);
+      });
+      
+      stream.on('end', () => {
+        resolve({ hash: hash.digest('hex'), size });
+      });
+      
+      stream.on('error', (err) => {
+        resolve({ hash: '', size }); // Graceful fallback
+      });
+    } catch (err) {
+      resolve({ hash: '', size: 0 });
+    }
+  });
+}
+
 function resolveActualPath(filePath: string): string {
   if (fs.existsSync(filePath)) return filePath;
   
@@ -454,6 +484,7 @@ ipcMain.handle('analyze-files', async (event, files: string[], globalMeta?: any)
   for (const file of files) {
     try {
       const metadata = await getAudioMetadata(file);
+      const hashInfo = await getFileHashAndSize(file).catch(() => ({ hash: '', size: 0 }));
       const ext = path.extname(file);
       const baseName = path.basename(file, ext);
       
@@ -464,13 +495,22 @@ ipcMain.handle('analyze-files', async (event, files: string[], globalMeta?: any)
         trackType = 'Song';
       }
       
+      // Check for exact duplicates in our indexed vault database
+      const existingDbPath = hashInfo.size > 0 
+        ? await checkDuplicateInDb(file, hashInfo.size, baseName + ext)
+        : null;
+
       const finalMetadata = {
         ...metadata,
         trackType,
         artist: globalMeta?.artist || '',
         album: globalMeta?.album || '',
         contributingArtist: globalMeta?.contributingArtist || '',
-        comment: globalMeta?.comment || ''
+        comment: globalMeta?.comment || '',
+        hash: hashInfo.hash,
+        fileSize: hashInfo.size,
+        alreadyInVault: !!existingDbPath,
+        vaultPath: existingDbPath || ''
       };
       
       let newName = generateFileName(baseName, metadata.genre, metadata.key, metadata.bpm, ext);

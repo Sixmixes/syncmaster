@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { UploadCloud, AlertCircle, CheckCircle, RefreshCw, Play, Pause, Database, Columns } from 'lucide-react';
+import { UploadCloud, AlertCircle, CheckCircle, RefreshCw, Play, Pause, Database, Columns, Trash2, Sparkles, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AudioVaultSearch } from './AudioVaultSearch';
 
@@ -25,6 +25,10 @@ type ProcessedFile = {
     duration?: number;
     mood?: string;
     style?: string;
+    hash?: string;
+    fileSize?: number;
+    alreadyInVault?: boolean;
+    vaultPath?: string;
   };
   error?: string;
   newName?: string;
@@ -214,6 +218,34 @@ export const FileOrganizer = ({
   const handleUnstage = useCallback((file: ProcessedFile) => {
     setFiles(prev => prev.filter(f => f.id !== file.id));
   }, []);
+
+  const handleAutoDeduplicate = useCallback(() => {
+    const seenHashes = new Set<string>();
+    const filesToKeep: ProcessedFile[] = [];
+    let duplicatesCount = 0;
+
+    for (const f of files) {
+      if (f.metadata?.alreadyInVault) {
+        duplicatesCount++;
+        continue;
+      }
+      if (f.metadata?.hash) {
+        if (seenHashes.has(f.metadata.hash)) {
+          duplicatesCount++;
+          continue;
+        }
+        seenHashes.add(f.metadata.hash);
+      }
+      filesToKeep.push(f);
+    }
+
+    if (duplicatesCount > 0) {
+      setFiles(filesToKeep);
+      alert(`Cleaned up workspace! Removed ${duplicatesCount} exact duplicates.`);
+    } else {
+      alert("No exact duplicates found in the workspace!");
+    }
+  }, [files]);
 
   const handleEditStart = useCallback((file: ProcessedFile) => {
     setEditingId(file.id);
@@ -565,6 +597,47 @@ export const FileOrganizer = ({
             <RefreshCw size={14} /> Auto-Name Staged Beats
           </button>
 
+          {files.filter(f => {
+            if (f.metadata?.alreadyInVault) return true;
+            const idx = files.indexOf(f);
+            if (f.metadata?.hash) {
+              const firstIndex = files.findIndex(other => other.metadata?.hash === f.metadata?.hash);
+              return firstIndex !== idx;
+            }
+            return false;
+          }).length > 0 && (
+            <button 
+              className="btn" 
+              style={{ 
+                width: '100%', 
+                padding: '10px', 
+                fontSize: '12px', 
+                marginBottom: '16px', 
+                background: 'rgba(239, 68, 68, 0.15)', 
+                border: '1px solid rgba(239, 68, 68, 0.3)', 
+                color: '#f87171',
+                fontWeight: 600,
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: '8px',
+                cursor: 'pointer'
+              }}
+              onClick={handleAutoDeduplicate}
+            >
+              <Trash2 size={14} /> Auto-Deduplicate Queue ({
+                files.filter((f, index) => {
+                  if (f.metadata?.alreadyInVault) return true;
+                  if (f.metadata?.hash) {
+                    const firstIndex = files.findIndex(other => other.metadata?.hash === f.metadata?.hash);
+                    return firstIndex !== index;
+                  }
+                  return false;
+                }).length
+              })
+            </button>
+          )}
+
           {/* Batch Default Metadata Form */}
           <div style={{ marginTop: '16px', marginBottom: '24px', padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
             <h3 style={{ fontSize: '11px', color: 'var(--accent-primary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Batch Default Tags</h3>
@@ -836,7 +909,49 @@ export const FileOrganizer = ({
                       </div>
                     </div>
                   ) : (
-                    <div className="file-name">{file.newName || file.originalName}</div>
+                    <div>
+                      <div className="file-name" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span>{file.newName || file.originalName}</span>
+                        {file.metadata?.alreadyInVault && (
+                          <span style={{
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            color: '#ef4444',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            borderRadius: '4px',
+                            padding: '1px 6px',
+                            fontSize: '10px',
+                            fontWeight: 600
+                          }}>
+                            EXACT VAULT DUPLICATE
+                          </span>
+                        )}
+                        {!file.metadata?.alreadyInVault && file.metadata?.hash && files.some(f => f.id !== file.id && f.metadata?.hash === file.metadata?.hash) && (
+                          <span style={{
+                            background: 'rgba(245, 158, 11, 0.15)',
+                            color: '#f59e0b',
+                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                            borderRadius: '4px',
+                            padding: '1px 6px',
+                            fontSize: '10px',
+                            fontWeight: 600
+                          }}>
+                            QUEUE DUPLICATE
+                          </span>
+                        )}
+                      </div>
+                      {file.metadata?.alreadyInVault && (
+                        <div style={{
+                          fontSize: '11px',
+                          color: '#f87171',
+                          marginTop: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}>
+                          <span>⚠️ Already organized in Vault: <span style={{ opacity: 0.8, wordBreak: 'break-all' }}>{file.metadata.vaultPath}</span></span>
+                        </div>
+                      )}
+                    </div>
                   )}
                   <div className="file-meta">
                     {file.metadata ? (

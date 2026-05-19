@@ -333,3 +333,14 @@ export function getIgnoredPaths(): Promise<string[]> {
         });
     });
 }
+
+export function checkDuplicateInDb(filepath: string, filesize: number, filename: string): Promise<string | null> {
+    return new Promise((resolve) => {
+        if (!db) return resolve(null);
+        const sql = `SELECT filepath FROM audio_files WHERE filepath = ? OR (filesize = ? AND filename = ?) LIMIT 1`;
+        db.get(sql, [filepath, filesize, filename], (err, row: any) => {
+            if (err || !row) resolve(null);
+            else resolve(row.filepath);
+        });
+    });
+}
